@@ -113,7 +113,10 @@
 - 수정: bat를 순수 ASCII + CRLF로 재작성(비ASCII 0바이트 확인). ps1은 ASCII 상태 유지 확인(비ASCII 0바이트). powershell 줄을 echo로 치환한 무해 사본으로 cmd 파싱 정상 검증.
 - 다음: 사용자 재시도 대기 — 우클릭 → 관리자 권한으로 실행, 기동 확인은 output\agent_shell\shell_status.txt 의 `elevated=True`.
 
-### 2026-08-09 — git 초기화·GitHub push (사용자 지시)
+### 2026-08-09 — 포트폴리오 생성·plan 서식 정규화 (사용자 지시)
+
+- [PF-sgz-statiz 포트폴리오](../PF-sgz-statiz/portfolio.md) 생성 — wf-tree 범위 승인 관문 통과(사용자 승인 2026-08-09). 작업 1(본 작업) 등재 + 작업 2(교전 통계 분석·시각화) 후보 등재.
+- plan.md를 현행 wf-doc·wf-tree 규칙으로 서식 정규화(의미 불변): ① `## 계획 트리` 절을 `## 작업 목록` 바로 앞으로 이동(템플릿 위치), ② 13개 TASK에 `상위: 없음` 필드 추가(분해 관계 명시), ③ Mermaid를 현행 표기로 재생성(승인 게이트 이중 테두리 `[[★…]]` 분리, in-progress `active`·`blocked` classDef), ④ 문서 연결에 포트폴리오 행 추가, ⑤ ASCII 트리 부분 진행 표기 `◐`→`[▶]` 통일.
 
 - README.md 작성(프로젝트 소개·동작 방식·설치·사용법·구조·문서 링크 — TASK-13에서 최종화 예정), .gitattributes 추가(`*.bat eol=crlf` — 위 실행기 결함 재발 방지, `*.png binary`).
 - `git init -b main` → 루트 커밋 580630d(73개 파일: 코드·테스트·문서·자산·img 픽스처·tools. .venv/output은 .gitignore로 제외) → https://github.com/bluesky5008/sgz_statiz 에 push, `origin/main` 추적 설정. 원격 해시 일치·작업 트리 클린 확인.
