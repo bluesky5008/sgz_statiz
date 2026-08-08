@@ -17,7 +17,8 @@ from deckscan.vision.deck_parser import DeckParser
 
 IMG = Path(__file__).resolve().parents[1] / "img"
 _S = 2546 / 2000
-PANEL_DY = {"4.png": 0, "5.png": 37, "6.png": 72}
+PANEL_DY = {"4.png": 0, "5.png": 37, "6.png": 72}       # 교차 검증 픽스처(아군=공격)
+ANCHOR_DY = {**PANEL_DY, "7.png": 0}                    # 앵커 계산용(7 = 아군=수비)
 
 TROOPS = {
     "4.png": [8783, 9868, 9677, 6412, 8762, 7676],
@@ -40,7 +41,13 @@ def client_frame(png: str) -> np.ndarray:
 
 
 def anchor(png: str) -> int:
-    return ui.PANEL_ANCHOR_Y + round(PANEL_DY[png] * _S)
+    return ui.PANEL_ANCHOR_Y + round(ANCHOR_DY[png] * _S)
+
+
+def _user_strip(png: str, right: bool) -> "np.ndarray":
+    box = ui.USER_DEF if right else ui.USER_ATT
+    x0, y0, x1, y1 = box
+    return client_frame(png)[y0:y1, x0:x1]
 
 
 class DeckParserTest(unittest.TestCase):
@@ -136,6 +143,23 @@ class DeckParserTest(unittest.TestCase):
         self.assertEqual([(s.side, s.slot) for s in rec.slots],
                          [("attack", 1), ("attack", 2), ("attack", 3),
                           ("defend", 1), ("defend", 2)])
+
+    def test_defend_left_panel_flips_sides(self):
+        """DES-05 v2(DCR-001): 아군=수비 전보(img/7)는 좌우 역할이 반전된다.
+
+        img/7 1행 — 좌(아군/수비): NPC 부대 100·100·빈 칸, 우(적군/공격):
+        3400·3300·3400, 결과 '패'. 좌측이 수비로 매핑되어야 한다.
+        """
+        rec = self.parser.parse(client_frame("7.png"), anchor("7.png"))
+        self.assertEqual(rec.result, "패")
+        self.assertEqual([s.troops for s in rec.slots if s.side == "attack"],
+                         [3400, 3300, 3400])
+        self.assertEqual([s.troops for s in rec.slots if s.side == "defend"],
+                         [100, 100])
+        # 유저 매핑도 반전: 공격 유저는 우측 스트립의 식별자여야 한다
+        rid, _, new = self.parser.users.resolve(_user_strip("7.png", right=True))
+        self.assertEqual(rec.attacker_id, rid)
+        self.assertFalse(new)  # 이미 등록된 ID와 매칭(신규 아님)
 
     def test_component_exception_gives_failed_fallback_key(self):
         """NFR-01: 구성요소 예외에도 파서는 레코드를 반환하고 대체 키로 저장 가능."""

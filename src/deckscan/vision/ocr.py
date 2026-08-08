@@ -19,7 +19,8 @@ log = logging.getLogger(__name__)
 
 RESULT_DIR = Path(__file__).resolve().parents[3] / "assets" / "templates" / "result"
 RESULT_BY_NAME = {"win": "승", "draw": "무", "lose": "패"}
-RESULT_THRESHOLD = 0.6
+# 실측(2026-08-09): 같은 인장 교차 소스 0.989~1.000, 다른 인장 ≤0.561
+RESULT_THRESHOLD = 0.75
 _BIN_THRESHOLD = 150
 
 _DATE_RE = re.compile(

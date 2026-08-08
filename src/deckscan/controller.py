@@ -1,7 +1,8 @@
-"""실행 요약·라벨 확정 절차 (설계 DES-10, FR-06·FR-07).
+"""scan 오케스트레이션·실행 요약·라벨 확정 절차 (설계 DES-10, FR-06·FR-07).
 
-scan 오케스트레이션(내비게이션·목록 순회·예외 경계)은 TASK-09·10의 실기
-부분이 갖춰진 뒤 이 모듈에 추가한다.
+run_scan은 설계 §정상·실패·복구 흐름의 예외 경계다: 내비게이션·순회 실패는
+run을 aborted로 마감하고 종료 코드 2를 반환하며, 이미 저장된 레코드는
+유지한다. 초기화 실패(창·권한·해상도, 종료 코드 1)는 CLI가 담당한다.
 """
 
 from __future__ import annotations
@@ -12,6 +13,32 @@ from typing import Callable
 from .store.datastore import DataStore
 
 log = logging.getLogger(__name__)
+
+
+def run_scan(store: DataStore, navigator, make_walker) -> tuple[int, str]:
+    """전보 순회 실행. 반환: (종료 코드 0|2, 요약 텍스트).
+
+    make_walker(run_id) → ListWalker — run 기록과 워커 생성 순서를 분리한다.
+    """
+    run_id = store.create_run()
+    walker = None
+    try:
+        navigator.goto_combat_tab()
+        walker = make_walker(run_id)
+        s = walker.walk()
+    except Exception:
+        log.exception("scan 중단 — run #%d aborted", run_id)
+        s = walker.summary if walker is not None else None
+        store.finish_run(run_id, "aborted",
+                         processed=s.processed if s else 0,
+                         saved=s.saved if s else 0,
+                         failed=s.failed if s else 0)
+        return 2, summarize_run(store, run_id)
+    store.finish_run(run_id, "done", processed=s.processed,
+                     saved=s.saved, failed=s.failed)
+    if s.partial or s.skipped:
+        log.info("partial %d건, 건너뜀 %d건", s.partial, s.skipped)
+    return 0, summarize_run(store, run_id)
 
 
 def label_pending(store: DataStore, ask: Callable[[str], str],

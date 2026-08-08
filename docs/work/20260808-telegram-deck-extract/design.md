@@ -3,9 +3,9 @@
 > 문서 유형: `design`
 > 작업 ID: `20260808-telegram-deck-extract`
 > 상태: `approved`
-> 기준선: `v1` (승인일 2026-08-08)
+> 기준선: `v2` (승인일 2026-08-09 — [DCR-001](./changes/DCR-001-list-traversal.md))
 > 작성일: 2026-08-08
-> 최종 갱신: 2026-08-08
+> 최종 갱신: 2026-08-09
 > 관련 문서: [REQ-20260808-telegram-deck-extract: 요구사항](./requirements.md), [ADR-001: 저장 형식](./decisions/ADR-001-storage-format.md), [ADR-002: 인식 전략](./decisions/ADR-002-recognition-strategy.md)
 
 ## 요약
@@ -71,8 +71,8 @@ CLI(scan|export|label|probe)
 - DES-01 **플랫폼 계층**: [map_search win/](file:///C:/src/git/map_search/src/mapscan/win) 4개 모듈과 watchdog을 무수정 복사. 창 탐색(`삼국지-전략판`), UIPI 권한 검사, WGC 캡처(`grab_fresh`, `CaptureStalled`), PostMessage 클릭·휠, 검은 화면·크기 변경 감지. 각 파일 머리에 원본 경로·복사일 주석을 남긴다.
 - DES-02 **ui_telegram 좌표 상수 모듈**: 이 작업의 유일한 캘리브레이션 지점. 클릭 좌표(더 보기, 메뉴의 동맹, 동맹 화면의 전보, 교전 탭), 화면 판정 마커 사각형(동맹 화면 제목, 동맹전보 제목, 교전 탭 활성), 목록 영역, 펼친 패널 내 상대 크롭(카드 6칸의 초상·이름 바·병력 행, 유저명 스트립, 일시·결과 영역)을 상수로 정의한다. 값은 구현 초기에 참고 이미지와 실기 스냅샷으로 실측한다(TASK로 인계).
 - DES-03 **TelegramNavigator**: 화면 전환의 실행과 판정. map_search에서 `wait_stable`(프레임 안정화), 마커 NCC 점수, `_click_verified`(클릭 직전 현재 화면 재검증), `_wait_marker`(등장·소멸 폴링), `_same_image`, 프레임↔클라이언트 좌표 변환을 이식한다. 단계: 메인 화면 확인 → 더 보기 → 동맹 → 전보 → 교전 탭. 각 단계는 목표 마커 등장으로 성공을 판정하고 타임아웃 시 `NavigationTimeout`을 던진다.
-- DES-04 **ListWalker**: 전보 목록 순회. 매 반복마다 현재 프레임에서 행 헤더 y좌표들을 템플릿 매칭으로 재탐지한다(펼침으로 행 위치가 밀려도 추적 가능). 전보가 아닌 행(격전 보상 배너)은 행 헤더 패턴 불일치로 자연 배제된다. 다음 미처리 행을 클릭 → 펼침 패널 마커(아군·적군 세로 라벨) 대기 → 패널 top 기준 상대 크롭을 DeckParser에 전달. 화면 내 행 소진 시 목록 영역에서 `wheel` 스크롤 후 `_same_image`로 종착(더 이상 스크롤 안 됨)을 판정한다. 처리 여부는 저장 계층의 `battle_key` 멱등에 위임하므로 스크롤 중복은 무해하다.
-- DES-05 **DeckParser**: 펼친 패널 이미지를 받아 `BattleRecord`(유저 2, 동맹 2, 일시, 결과, 슬롯 6 × (장수 ID, 레벨, 병력))를 생성. 필드별 실패를 모아 `ok | partial | failed`를 판정하고, 실패 필드 크롭을 증거로 저장한다.
+- DES-04 **ListWalker** (v2, [DCR-001](./changes/DCR-001-list-traversal.md)): 전보 목록 순회. 매 반복마다 현재 프레임에서 행 헤더 y좌표들을 템플릿 매칭으로 재탐지한다(펼침으로 행 위치가 밀려도 추적 가능). 전보가 아닌 행(격전 보상 배너)은 행 헤더 패턴 불일치로 자연 배제된다. **행별 펼침 상태를 판정**(행 앵커 근방의 '아군' 세로 라벨)해 이미 펼쳐진 행은 클릭 없이 바로 파싱하고, 접힌 행(묶음 등)만 클릭해 펼친다(A-02 v2). 행 클릭은 헤더 중앙의 위치 링크·유저명·동맹명을 피한 **안전 x 지대**로 한정한다(오클릭 시 월드맵 이동 — 실기 사고 실증). 화면 내 행 소진 시 목록 영역에서 `wheel` 스크롤 후 `_same_image`로 종착(더 이상 스크롤 안 됨)을 판정한다. 처리 여부는 저장 계층의 `battle_key` 멱등에 위임하므로 스크롤 중복은 무해하다.
+- DES-05 **DeckParser** (v2, [DCR-001](./changes/DCR-001-list-traversal.md)): 펼친 패널 이미지를 받아 `BattleRecord`(유저 2, 동맹 2, 일시, 결과, 슬롯 6 × (장수 ID, 레벨, 병력))를 생성. **패널 좌우 세로 라벨('공격'/'수비')을 템플릿 판정해 좌측 3칸의 공격·수비 역할을 결정한다**(아군=수비 전보는 좌우 역할 반전 — 실기 실증. BattleRecord의 attacker/defender 의미는 불변). 필드별 실패를 모아 `ok | partial | failed`를 판정하고, 실패 필드 크롭을 증거로 저장한다.
 - DES-06 **IdentityMatcher**: [ADR-002](./decisions/ADR-002-recognition-strategy.md)의 식별기. 네임스페이스(users/portraits/alliances)별 템플릿 라이브러리에 NCC 매칭, 임계 이상 최고점 채택. 미등록이면 신규 ID 발행 + 크롭을 템플릿으로 저장 + OCR 제안 라벨과 함께 `pending` 등록. 동일 라벨에 복수 템플릿 허용(초상 변형 흡수).
 - DES-07 **DigitGlyphReader**: [map_search DigitReader](file:///C:/src/git/map_search/src/mapscan/vision/digits.py) 이식. 이름 바 좌측 레벨 숫자(금색 폰트 0~9) 판독. 글리프는 구현 단계에서 수확 도구로 등록한다.
 - DES-08 **OcrReader**: winocr(Windows.Media.Ocr, ko) 어댑터. 병력 수, 전투 일시, 승·무·패 결과 판독과 신규 등록용 라벨 제안. P-01에서 숫자·날짜 정확성 실증. 엔진 교체는 이 어댑터 구현 교체로 한정한다. 결과 판독은 `승/무/패` 인장 영역의 템플릿 매칭을 우선 후보로 하되(3종 폐쇄 집합), 어느 쪽이든 이 컴포넌트가 캡슐화한다.
@@ -237,6 +237,7 @@ deckscan probe  [--hwnd N]           # 창 나열, 스냅샷 저장, 마커 점�
 | 2026-08-08 | 최초 초안 작성 | 요구사항 초안, map_search 조사, P-01 결과 | draft | Claude(wf-design) |
 | 2026-08-08 | 자체 검토 후 승인 요청 상태로 전환 | 일관성 검토(§4.5) 통과 | draft → awaiting-approval | Claude(wf-design) |
 | 2026-08-08 | 기준선 v1 발행 | 사용자 승인 응답 | awaiting-approval → approved, v1 | 사용자 승인 / Claude 기록 |
+| 2026-08-09 | DES-04 순회 전략(펼침 판정·안전 클릭 지대), DES-05 측면 라벨 판정 — 기준선 v2 | [DCR-001](./changes/DCR-001-list-traversal.md) 승인 | approved, v2 | 사용자 승인 / Claude 기록 |
 
 ## 인계
 

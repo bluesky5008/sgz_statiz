@@ -37,7 +37,7 @@ def date_strip(png: str) -> np.ndarray:
 
 def seal_crop(png: str) -> np.ndarray:
     dy = PANEL_DY[png]
-    return _crop(png, (950, 112 + dy, 1045, 195 + dy))
+    return _crop(png, (955, 142 + dy, 1040, 210 + dy))  # 글리프 전용(위치 텍스트 제외)
 
 
 class OcrReaderTest(unittest.TestCase):

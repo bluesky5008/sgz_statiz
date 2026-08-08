@@ -11,8 +11,8 @@
 ## 요약
 
 - 목적: 승인된 기준선 v1을 작업 단위로 번역한 구현 계획.
-- 현재 결론 또는 상태: TASK-01·02·04~08 완료, TASK-10·11은 오프라인 부분 완료(테스트 33건 성공, 2026-08-09). 남은 작업은 전부 실기 계열 — TASK-03은 관리자 실행기 기동 대기(게임이 관리자 권한이라 입력 전달에 도구 승격 필요).
-- 다음 행동: 관리자 실행기 기동(사용자) → TASK-03 좌표 실측 → TASK-09 → TASK-10(순회) → TASK-11(scan) → TASK-12 → TASK-13.
+- 현재 결론 또는 상태: **TASK-01~11 완료**(기준선 v2 = DCR-001, 오프라인 테스트 44건 성공). 실기 scan 동작 실증(전체 순회 20건 처리·저장·멱등). TASK-12 진행 중 — 실기 결함 2건(묶음 행 펼침 클릭 무효, 목록 경계 패널 가드) 수정 후 AC 판정 남음. 인장 3종·글리프(6·7 제외+변형 4종) 수확 완료.
+- 다음 행동: [work-log 재개 지점](./work-log.md#재개-지점) — cmd_0018 결과 확인 → 결함 2건 수정 → AC-01~06 검증·verification.md → TASK-13.
 
 ## 문서 연결
 
@@ -26,9 +26,9 @@
 
 ## 기준선
 
-- 관련 요구사항: [요구사항 v1](./requirements.md) 전체
-- 관련 설계: [설계 v1](./design.md) 전체
-- 관련 ADR·DCR: [ADR-001](./decisions/ADR-001-storage-format.md), [ADR-002](./decisions/ADR-002-recognition-strategy.md). DCR 없음
+- 관련 요구사항: [요구사항 v2](./requirements.md) 전체 (2026-08-09, DCR-001)
+- 관련 설계: [설계 v2](./design.md) 전체 (2026-08-09, DCR-001)
+- 관련 ADR·DCR: [ADR-001](./decisions/ADR-001-storage-format.md), [ADR-002](./decisions/ADR-002-recognition-strategy.md), [DCR-001](./changes/DCR-001-list-traversal.md)(승인 2026-08-09 — 순회 전략·측면 매핑·A-02)
 
 ## 작업 정의
 
@@ -45,21 +45,21 @@
 모든 TASK는 작업 루트 직속이다(`상위: 없음`). 간선은 전부 `depends:`(순서 제약)다. `[실기]` = 게임 클라이언트 필요(2026-08-08 사용자 확인: 클라이언트 가동 중), `[TDD]` = 실패하는 선행 테스트로 시작(테스트 선행은 각 TASK의 검증 방법에 명시하며 별도 자식 노드로 분해하지 않는다).
 
 ```text
-[작업] 20260808-telegram-deck-extract — deckscan (기준선 v1) .... in-progress (구현 7/13 + 부분 2, ⚠ blocked 1)
+[작업] 20260808-telegram-deck-extract — deckscan (기준선 v2) .... in-progress (구현 11/13, 검증 진행 중)
 ├─ [✓] 설계 단계 (4/4) — 요구사항 v1 · 설계 v1 · ADR-001/002
 │   └─ [✓★] 승인: 기준선 v1 (2026-08-08)
 ├─ [✓] 구현: TASK-01 프로젝트 뼈대
 ├─ [✓] 구현: TASK-02 플랫폼 계층 복사          depends: 01
-├─ [⚠] 구현: TASK-03 좌표 실측·마커 [실기]     depends: 02   ← blocked: 관리자 실행기 기동 필요
+├─ [✓] 구현: TASK-03 좌표 실측·마커 [실기]     depends: 02   (패 인장·행 클릭 지대 잔여, ⚠ A-02 편차 → 10에서 DCR 판정)
 ├─ [✓] 구현: TASK-04 DataStore·battle_key [TDD] depends: 01
 ├─ [✓] 구현: TASK-05 IdentityMatcher [TDD]     depends: 01, 04
 ├─ [✓] 구현: TASK-06 DigitGlyphReader [TDD]    depends: 01   (글리프 1·2·3·6·7·8 실기 수확 잔여)
 ├─ [✓] 구현: TASK-07 OcrReader [TDD]           depends: 01   (무·패 인장 실기 수확 잔여)
 ├─ [✓] 구현: TASK-08 DeckParser [TDD·AC-02 선행] depends: 04, 05, 06, 07   (패널 상수·임계는 TASK-12 재보정)
-├─ [ ] 구현: TASK-09 TelegramNavigator [실기]  depends: 02, 03
-├─ [▶] 구현: TASK-10 ListWalker·P-03 [실기]    depends: 08, 09   (행 탐지·펼침 앵커 완료, 순회는 실기 대기)
-├─ [▶] 구현: TASK-11 Controller·CLI [TDD]      depends: 04~10   (export·label·요약 완료, scan 연결 대기)
-├─ [ ] 검증: TASK-12 실기 통합 검증 AC-01~06 [실기] depends: 03, 09~11
+├─ [✓] 구현: TASK-09 TelegramNavigator [실기]  depends: 02, 03
+├─ [✓] 구현: TASK-10 ListWalker·P-03 [실기]    depends: 08, 09   (기준선 v2 순회 — 묶음 행 펼침 클릭은 12에서 실측 보정)
+├─ [✓] 구현: TASK-11 Controller·CLI [TDD]      depends: 04~10
+├─ [▶] 검증: TASK-12 실기 통합 검증 AC-01~06 [실기] depends: 03, 09~11   (결함 2건 수정·AC 판정·verification.md 남음)
 └─ [ ] 문서화: TASK-13 README·완료 보고        depends: 12
 ```
 
@@ -80,13 +80,13 @@ flowchart TD
         T08["TASK-08 DeckParser (AC-02 테스트 선행)"]:::done
     end
     subgraph G3["실기 계열 — 클라이언트 필요"]
-        T03["TASK-03 좌표 실측·마커 ⚠ blocked"]:::blocked
-        T09["TASK-09 TelegramNavigator"]:::todo
-        T10["TASK-10 ListWalker (P-03) — 행 탐지 완료"]:::active
+        T03["TASK-03 좌표 실측·마커 ✓"]:::done
+        T09["TASK-09 TelegramNavigator"]:::done
+        T10["TASK-10 ListWalker (P-03)"]:::done
     end
     subgraph G4["마무리"]
-        T11["TASK-11 Controller·CLI — export·label 완료"]:::active
-        T12["TASK-12 실기 통합 검증 AC-01~06"]:::todo
+        T11["TASK-11 Controller·CLI"]:::done
+        T12["TASK-12 실기 통합 검증 AC-01~06"]:::active
         T13["TASK-13 README·완료 보고"]:::todo
     end
     APR -.-> T01
@@ -140,7 +140,7 @@ flowchart TD
 
 ### TASK-03: P-02 좌표 실측 + ui_telegram 상수 + UI 마커 템플릿 (DES-02)
 
-- 상태: in-progress → **blocked** (2026-08-09 — 게임이 관리자 권한 실행이라 입력 전달에 도구 승격 필요. 관리자 실행기(tools/agent_shell_admin.bat) 기동 실패 2회: ①한글 경로 타이핑 추정 ②ps1 비BOM UTF-8 인코딩 문제 → ASCII 전용으로 수정 완료, 재시도 전 사용자가 세션 전환 결정. 재개 조건: 관리자 실행기 기동)
+- 상태: completed (2026-08-09 — 관리자 실행기 경유 실측 완료: 클릭 좌표 4종 2회 검증, 마커 5종 수확+교차 NCC 행렬(임계 0.8), 인장 상자 재보정+무 인장 수확, LIST_REGION·SCROLL_POINT. A-06 성립 확인. [work-log](./work-log.md#2026-08-09--task-03-좌표-실측마커인장-실기-관리자-실행기-경유). 잔여: 패 인장(TASK-12), 행 클릭 안전 지대(TASK-10). **주의: A-02 편차 발견 — 미열람 행 전체 펼침·좌우 역할 반전, TASK-10 착수 시 DCR 판정**)
 - 상위: 없음
 - 목표: probe 도구(스냅샷·마커 점수)를 먼저 이식하고, 실기 화면에서 클릭 좌표(더 보기·동맹·전보·교전 탭), 화면 판정 마커 4종, 목록 영역, 펼친 패널 상대 크롭을 실측해 `ui_telegram.py`와 `assets/templates/ui/` + 자산 대장을 확정
 - 관련 요구사항과 설계: FR-01, [설계 §컴포넌트 DES-02](./design.md#컴포넌트와-책임), 가정 A-06·A-07
@@ -197,7 +197,7 @@ flowchart TD
 
 ### TASK-09: TelegramNavigator (DES-03)
 
-- 상태: pending
+- 상태: completed (2026-08-09 — TDD 4건 + 실기 1회 내비게이션 성공(재시도 로직 실전 작동 포함), [work-log](./work-log.md#2026-08-09--task-09-telegramnavigator-tdd--실기). 실기 결함 2건 수정: 전환 연출 중 클릭 무시 → wait_stable, 목록 갱신 중 무반응 → 1회 재시도)
 - 상위: 없음
 - 목표: wait_stable·마커 NCC·클릭 전 재검증·타임아웃 이식, 메인→교전 탭 내비게이션(FR-01, NFR-02)
 - 의존성: TASK-02, TASK-03
@@ -206,16 +206,16 @@ flowchart TD
 
 ### TASK-10: ListWalker (DES-04)
 
-- 상태: in-progress (2026-08-09 — 오프라인 부분 완료: 행 재탐지 `detect_row_ys`·펼침 앵커 `find_panel_anchor`·UI 템플릿 2종 수확·픽스처 테스트 5건 성공, [work-log](./work-log.md#2026-08-09--task-10-오프라인-부분-행-재탐지펼침-앵커-tdd). 순회 루프·스크롤·P-03은 TASK-09 이후 실기)
+- 상태: completed (2026-08-09 — 기준선 v2 순회 구현: 행 재탐지·행별 펼침 판정·측면 라벨 판정·스크롤·종착·이중 프레임 확증·멱등. 오프라인 walk 테스트 + 실기 전체 순회 실증, [work-log](./work-log.md#2026-08-09--task-10-완결부task-11-scan-연결-tdd--실기-기준선-v2). 잔여 실측 2건(묶음 행 펼침 클릭 지대·목록 경계 가드)은 TASK-12에서 보정)
 - 상위: 없음
-- 목표: 행 헤더 재탐지, 펼치기·펼침 마커 대기, 배너 스킵, 휠 스크롤·종착 판정(P-03 확인 포함)
+- 목표: 행 헤더 재탐지, **행별 펼침 상태 판정 후 접힌 행만 안전 지대 클릭**(DES-04 v2), 배너 스킵, 휠 스크롤·종착 판정(P-03 확인 포함). DeckParser에 측면 라벨 판정 추가(DES-05 v2)
 - 의존성: TASK-08, TASK-09
 - 검증 방법: 행 헤더 탐지는 img/3~6 픽스처 단위 테스트(펼침 위치 3종·배너 미탐지), 순회는 실기(TASK-12). P-03 실패 시 순회 전략 변경은 DCR로 반환
 - 완료 조건: 픽스처 테스트 성공, 실기 순회 1회 성공
 
 ### TASK-11: Controller + CLI (DES-10)
 
-- 상태: in-progress (2026-08-09 — 오프라인 부분 완료: export CSV 계약·label 흐름·run 요약 TDD 6건 성공, CLI export·label 명령 동작, [work-log](./work-log.md#2026-08-09--task-11-오프라인-부분-exportlabel요약-tdd). scan 오케스트레이션은 TASK-09·10 이후)
+- 상태: completed (2026-08-09 — export·label·요약 + `run_scan` 오케스트레이션·CLI scan(해상도 검증·종료 코드 0/1/2) TDD 완료, 실기 scan exit 0 실증, [work-log](./work-log.md#2026-08-09--task-10-완결부task-11-scan-연결-tdd--실기-기준선-v2))
 - 상위: 없음
 - 목표: `scan|export|label|probe` 명령, run 요약(FR-06), 실패 흐름 표( [설계](./design.md#정상실패복구-흐름) ) 구현, CSV 내보내기
 - 의존성: TASK-04~10

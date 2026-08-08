@@ -1,13 +1,17 @@
-"""TASK-11 선행 테스트(오프라인 부분) — export CSV 계약·label 흐름·run 요약.
+"""TASK-11 선행 테스트 — export CSV 계약·label 흐름·run 요약·scan 오케스트레이션.
 
-(FR-06, FR-07·AC-06 완결, 설계 §CSV 내보내기 계약. scan 전체는 실기 — TASK-12.)
+(FR-06, FR-07·AC-06 완결, 설계 §CSV 내보내기 계약·§정상실패복구 흐름.
+scan의 실기 종단 검증은 TASK-12.)
 """
 
 import tempfile
 import unittest
 from pathlib import Path
 
-from deckscan.controller import label_pending, summarize_run
+import numpy as np
+from PIL import Image
+
+from deckscan.controller import label_pending, run_scan, summarize_run
 from deckscan.store.csv_export import export_csv
 from deckscan.store.datastore import BattleRecord, DataStore, SlotRecord
 
@@ -116,6 +120,55 @@ class SummaryTest(unittest.TestCase):
         for token in ("처리 5", "저장 4", "실패 1", "pending 2", "label"):
             self.assertIn(token, text)
         store.close()
+
+
+class RunScanTest(unittest.TestCase):
+    """run_scan 오케스트레이션 — 내비게이터는 스텁, 순회는 img/7 정지 화면."""
+
+    def _walker_factory(self, store, tmp):
+        from deckscan.nav.list_walker import ListWalker
+        from deckscan.nav.navigator import ScreenJudge
+        from deckscan.vision.deck_parser import DeckParser
+        from tests.test_list_walker import FakeCapture, FakeInput
+
+        window = np.asarray(Image.open(
+            Path(__file__).resolve().parents[1] / "img" / "7.png").convert("RGB"))
+        judge = ScreenJudge(FakeCapture(window), (2544, 657))
+        parser = DeckParser(store, Path(tmp), evidence_dir=Path(tmp) / "ev")
+        return lambda run_id: ListWalker(judge, FakeInput(), parser, store,
+                                         run_id, captures_dir=Path(tmp) / "cap")
+
+    def test_success_records_run_and_returns_zero(self):
+        class NavOk:
+            def goto_combat_tab(self):
+                return None
+
+        with tempfile.TemporaryDirectory() as tmp:
+            store = DataStore(":memory:")
+            code, text = run_scan(store, NavOk(),
+                                  self._walker_factory(store, tmp))
+            self.assertEqual(code, 0)
+            self.assertIn("처리 2", text)
+            run = store.get_run(1)
+            self.assertEqual(run["status"], "done")
+            self.assertEqual(run["processed"], 2)
+            store.close()
+
+    def test_navigation_failure_aborts_run_with_exit_2(self):
+        from deckscan.nav.navigator import NavigationTimeout
+
+        class NavFail:
+            def goto_combat_tab(self):
+                raise NavigationTimeout("테스트")
+
+        with tempfile.TemporaryDirectory() as tmp:
+            store = DataStore(":memory:")
+            code, text = run_scan(store, NavFail(),
+                                  self._walker_factory(store, tmp))
+            self.assertEqual(code, 2)
+            self.assertEqual(store.get_run(1)["status"], "aborted")
+            self.assertEqual(store.battle_count(), 0)
+            store.close()
 
 
 if __name__ == "__main__":

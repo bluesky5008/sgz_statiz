@@ -1,15 +1,21 @@
-"""TASK-10 선행 테스트(픽스처 부분) — 행 헤더 탐지·펼침 패널 앵커 (FR-02, DES-04).
+"""TASK-10 선행 테스트 — 행 탐지·펼침 앵커·펼침 판정·순회 루프 (FR-02, DES-04 v2).
 
-순회(클릭·스크롤) 자체는 실기 검증(TASK-12)이며, 여기서는 img/3~6.png로
-행 재탐지와 펼침 마커→패널 앵커 변환을 검증한다. 격전 보상 배너는 행
-아이콘이 없어 자연 배제되어야 한다(3·4.png 배너 구간 client y 456~523).
+실기 순회(스크롤 실측·묶음 행 펼침·P-03)는 TASK-12에서 검증하고, 여기서는
+img/3~7.png로 행 재탐지, 펼침 마커→패널 앵커 변환, 행별 펼침 상태 판정,
+walk() 루프(파싱·멱등·종착)를 검증한다. 격전 보상 배너는 행 아이콘이 없어
+자연 배제되어야 한다(3·4.png 배너 구간 client y 456~523).
 """
 
 import tempfile
 import unittest
 from pathlib import Path
 
+import numpy as np
+from PIL import Image
+
 from deckscan.nav import list_walker as lw
+from deckscan.nav import ui_telegram as ui
+from deckscan.nav.navigator import ScreenJudge
 from deckscan.store.datastore import DataStore
 from deckscan.vision.deck_parser import DeckParser
 from tests.test_deck_parser import TROOPS, LEVELS, anchor, client_frame
@@ -60,6 +66,106 @@ class PanelAnchorTest(unittest.TestCase):
                 self.assertEqual(rec.parse_status, "ok", png)
                 self.assertEqual([s.troops for s in rec.slots], TROOPS[png], png)
                 self.assertEqual([s.level for s in rec.slots], LEVELS[png], png)
+            store.close()
+
+
+class RowExpandedTest(unittest.TestCase):
+    def test_expanded_state_per_row(self):
+        f4 = client_frame("4.png")
+        rows4 = lw.detect_row_ys(f4)
+        self.assertEqual([lw.row_expanded(f4, y) for y in rows4],
+                         [True, False, False, False, False])
+        f7 = client_frame("7.png")
+        rows7 = lw.detect_row_ys(f7)
+        self.assertEqual([lw.row_expanded(f7, y) for y in rows7[:2]],
+                         [True, True])  # 다중 동시 펼침(A-02 v2)
+
+    def test_row_anchor_matches_content_anchor(self):
+        self.assertEqual(lw.row_anchor(127), anchor("4.png"))
+
+
+class FakeCapture:
+    """항상 같은 창 프레임 — 스크롤해도 불변(종착 상태 재현)."""
+
+    def __init__(self, window_frame: np.ndarray):
+        self.frame = window_frame
+
+    def grab_fresh(self) -> np.ndarray:
+        return self.frame
+
+
+class FlickerCapture:
+    """두 프레임을 번갈아 반환 — 전환 연출 중의 일시 렌더 재현."""
+
+    def __init__(self, a: np.ndarray, b: np.ndarray):
+        self.frames = [a, b]
+        self.i = 0
+
+    def grab_fresh(self) -> np.ndarray:
+        self.i += 1
+        return self.frames[self.i % 2]
+
+
+class FakeInput:
+    def __init__(self):
+        self.clicks: list[tuple[int, int]] = []
+        self.wheels: list[tuple[int, int, int]] = []
+
+    def click(self, x, y):
+        self.clicks.append((x, y))
+
+    def wheel(self, x, y, notches):
+        self.wheels.append((x, y, notches))
+
+
+class WalkTest(unittest.TestCase):
+    def test_walk_parses_visible_expanded_rows_idempotently(self):
+        """img/7 정지 화면 walk: 펼친 행 2개 파싱(3행은 패널 잘림 — 스크롤 몫),
+        스크롤 후 화면 불변 → 종착. 재실행에도 레코드 수 불변(AC-03 오프라인)."""
+        window = np.asarray(Image.open(
+            Path(__file__).resolve().parents[1] / "img" / "7.png").convert("RGB"))
+        with tempfile.TemporaryDirectory() as tmp:
+            store = DataStore(":memory:")
+            parser = DeckParser(store, Path(tmp), evidence_dir=Path(tmp) / "ev")
+            judge = ScreenJudge(FakeCapture(window), (2544, 657))
+            fi = FakeInput()
+            run = store.create_run()
+            walker = lw.ListWalker(judge, fi, parser, store, run,
+                                   captures_dir=Path(tmp) / "cap")
+            s = walker.walk()
+            self.assertEqual(s.processed, 2)
+            self.assertEqual(store.battle_count(), 2)
+            self.assertEqual(len(fi.wheels), 1)       # 스크롤 1회 → 불변 → 종착
+            self.assertEqual(fi.clicks, [])           # 접힌 행 없음 — 클릭 불필요
+            for b in store.iter_battles():
+                self.assertTrue(Path(b["capture_path"]).is_file())  # NFR-03
+
+            walker2 = lw.ListWalker(judge, fi, parser, store, run,
+                                    captures_dir=Path(tmp) / "cap")
+            walker2.walk()
+            self.assertEqual(store.battle_count(), 2)  # 멱등
+            store.close()
+
+    def test_transient_panel_is_not_parsed(self):
+        """일시 렌더 방어(2026-08-09 실기 중복 재현): 패널 픽셀이 프레임마다
+        흔들리는 행(1행)은 확증 실패로 저장하지 않고, 안정된 행(2행)만 저장."""
+        a = np.asarray(Image.open(
+            Path(__file__).resolve().parents[1] / "img" / "7.png").convert("RGB"))
+        b = a.copy()
+        rows = lw.detect_row_ys(a[31:688, 1:2545])
+        y0 = 31 + lw.row_anchor(rows[0]) + 60          # 1행 패널 내부(창 좌표)
+        b[y0:y0 + 60, 1200:1260] = np.clip(
+            b[y0:y0 + 60, 1200:1260].astype(int) + 60, 0, 255).astype(np.uint8)
+        with tempfile.TemporaryDirectory() as tmp:
+            store = DataStore(":memory:")
+            parser = DeckParser(store, Path(tmp), evidence_dir=Path(tmp) / "ev")
+            judge = ScreenJudge(FlickerCapture(a, b), (2544, 657))
+            run = store.create_run()
+            walker = lw.ListWalker(judge, FakeInput(), parser, store, run,
+                                   captures_dir=Path(tmp) / "cap")
+            s = walker.walk()
+            self.assertEqual(s.processed, 1)           # 2행만
+            self.assertEqual(store.battle_count(), 1)
             store.close()
 
 

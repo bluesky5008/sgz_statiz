@@ -1,8 +1,4 @@
-"""deckscan CLI (설계 DES-10).
-
-현재 단계: probe(창 진단·스냅샷·캘리브레이션 클릭)·export·label 제공.
-scan은 TASK-09·10(실기 부분) 이후 추가한다.
-"""
+"""deckscan CLI (설계 DES-10): scan | export | label | probe."""
 
 from __future__ import annotations
 
@@ -64,6 +60,53 @@ def cmd_probe(args: argparse.Namespace) -> int:
     return 0
 
 
+REQUIRED_CLIENT = (2544, 657)   # NFR-04 — 캘리브레이션 전제 해상도
+
+
+def cmd_scan(args: argparse.Namespace) -> int:
+    from .controller import run_scan
+    from .nav.list_walker import ListWalker
+    from .nav.navigator import ScreenJudge
+    from .nav.telegram import TelegramNavigator
+    from .store.datastore import DataStore
+    from .vision.deck_parser import DeckParser
+
+    wins = session.find_client_windows()
+    if args.hwnd is not None:
+        ws = session.WindowSession(args.hwnd)
+    elif len(wins) == 1:
+        ws = session.WindowSession(wins[0].hwnd)
+    else:
+        print("대상 창을 찾지 못했거나 여러 개입니다 — --hwnd로 지정하세요")
+        return 1
+    try:
+        ws.check_permission()
+    except Exception as e:
+        print(f"입력 권한 없음: {e}")
+        return 1
+    info = ws.info()
+    if info.client != REQUIRED_CLIENT:
+        print(f"클라이언트 크기 {info.client} ≠ {REQUIRED_CLIENT} — 실행 거부(NFR-04)")
+        return 1
+
+    root = Path.cwd()
+    with DataStore(args.db) as store, \
+            WgcCapture(info.hwnd, info.title) as cap:
+        judge = ScreenJudge(cap, info.client)
+        inp = PostMessageInput(info.hwnd)
+        nav = TelegramNavigator(judge, inp)
+        parser = DeckParser(store, root)
+
+        def make_walker(run_id: int) -> ListWalker:
+            return ListWalker(judge, inp, parser, store, run_id,
+                              max_items=args.max_items,
+                              scroll=not args.no_scroll)
+
+        code, summary = run_scan(store, nav, make_walker)
+    print(summary)
+    return code
+
+
 def cmd_export(args: argparse.Namespace) -> int:
     from .store.csv_export import export_csv
     from .store.datastore import DataStore
@@ -91,6 +134,15 @@ def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(prog="deckscan",
                                 description="동맹 전보(교전) 덱 정보 추출 도구")
     sub = p.add_subparsers(dest="cmd", required=True)
+
+    ps = sub.add_parser("scan", help="교전 전보 순회·추출 실행")
+    ps.add_argument("--hwnd", type=lambda s: int(s, 0), default=None)
+    ps.add_argument("--max-items", type=int, default=None,
+                    help="처리할 전보 수 상한 (기본: 전체)")
+    ps.add_argument("--no-scroll", action="store_true",
+                    help="화면에 보이는 행만 처리(스크롤 생략)")
+    ps.add_argument("--db", default=DEFAULT_DB)
+    ps.set_defaults(func=cmd_scan)
 
     pp = sub.add_parser("probe", help="창 진단·스냅샷 (캘리브레이션용)")
     pp.add_argument("--hwnd", type=lambda s: int(s, 0), default=None)
