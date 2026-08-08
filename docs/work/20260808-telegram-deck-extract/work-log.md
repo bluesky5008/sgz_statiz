@@ -113,6 +113,11 @@
 - 수정: bat를 순수 ASCII + CRLF로 재작성(비ASCII 0바이트 확인). ps1은 ASCII 상태 유지 확인(비ASCII 0바이트). powershell 줄을 echo로 치환한 무해 사본으로 cmd 파싱 정상 검증.
 - 다음: 사용자 재시도 대기 — 우클릭 → 관리자 권한으로 실행, 기동 확인은 output\agent_shell\shell_status.txt 의 `elevated=True`.
 
+### 2026-08-09 — git 초기화·GitHub push (사용자 지시)
+
+- README.md 작성(프로젝트 소개·동작 방식·설치·사용법·구조·문서 링크 — TASK-13에서 최종화 예정), .gitattributes 추가(`*.bat eol=crlf` — 위 실행기 결함 재발 방지, `*.png binary`).
+- `git init -b main` → 루트 커밋 580630d(73개 파일: 코드·테스트·문서·자산·img 픽스처·tools. .venv/output은 .gitignore로 제외) → https://github.com/bluesky5008/sgz_statiz 에 push, `origin/main` 추적 설정. 원격 해시 일치·작업 트리 클린 확인.
+
 ### 2026-08-09 — TASK-11 오프라인 부분: export·label·요약 (TDD)
 
 - 수행 내용: 선행 테스트 5건 작성(Red: 모듈 부재) → `store/csv_export.py`(UTF-8 BOM, battles_·deck_long_ 2종 — map_search 규약 이식, 분할 저장은 규모상 제외), `controller.py`(`label_pending` — 빈값=건너뜀·q=중단·확정 수 반환, `summarize_run` — FR-06 요약+pending 안내), `datastore.battle_rows()`(전보 1행 라벨 조인), CLI `export`·`label` 명령 연결(Green). deck_long 컬럼은 설계 열거 그대로(동맹·parse_status는 battles CSV가 담당).
@@ -130,7 +135,6 @@
 - TASK-03(blocked — 관리자 실행기 대기), TASK-09, TASK-10(실기 부분), TASK-11~13
 - 실기 수확 잔여: 레벨 글리프 1·2·3·6·7·8, 무·패 인장
 - TASK-12 확인 항목: row_icon 템플릿의 동맹 문장 여부, 유저·동맹 NCC 임계 0.80 재보정, 빈 카드 칸 판정 실기 확인
-- git 저장소 미초기화(사용자 결정 대기)
 
 ## 재개 지점
 
