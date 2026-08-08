@@ -1,0 +1,117 @@
+"""deckscan CLI (설계 DES-10).
+
+현재 단계: probe(창 진단·스냅샷·캘리브레이션 클릭)·export·label 제공.
+scan은 TASK-09·10(실기 부분) 이후 추가한다.
+"""
+
+from __future__ import annotations
+
+import argparse
+import datetime as _dt
+import sys
+from pathlib import Path
+
+from PIL import Image
+
+from .win import session
+from .win.capture import WgcCapture
+from .win.input import PostMessageInput
+
+PROBE_DIR = Path("output") / "probe"
+DEFAULT_DB = str(Path("output") / "deckscan.db")
+DEFAULT_EXPORT_DIR = str(Path("output") / "export")
+
+
+def _snap(cap: WgcCapture, tag: str) -> Path:
+    frame = cap.grab_fresh()
+    PROBE_DIR.mkdir(parents=True, exist_ok=True)
+    ts = _dt.datetime.now().strftime("%H%M%S")
+    path = PROBE_DIR / f"snap_{ts}_{tag}.png"
+    Image.fromarray(frame).save(path)
+    print(f"snapshot: {path}  frame={frame.shape[1]}x{frame.shape[0]}")
+    return path
+
+
+def cmd_probe(args: argparse.Namespace) -> int:
+    wins = session.find_client_windows()
+    for w in wins:
+        print(f"hwnd={w.hwnd:#x} pid={w.pid} elevated={w.elevated} "
+              f"rect={w.rect} client={w.client} title='{w.title}'")
+    if not wins and args.hwnd is None:
+        print("대상 창 없음")
+        return 1
+    if args.hwnd is not None:
+        ws = session.WindowSession(args.hwnd)
+    else:
+        if len(wins) != 1:
+            print("--hwnd로 창을 지정하세요")
+            return 1
+        ws = session.WindowSession(wins[0].hwnd)
+    if args.click:
+        ws.check_permission()   # 입력은 UIPI 제약 — 스냅샷만이면 승격 불필요
+    info = ws.info()
+    print(f"attached: hwnd={info.hwnd:#x} client={info.client}")
+    with WgcCapture(info.hwnd, info.title) as cap:
+        _snap(cap, "probe")
+        if args.click:
+            x, y = args.click
+            inp = PostMessageInput(info.hwnd)
+            inp.click(x, y)
+            print(f"click: ({x},{y}) [클라이언트 좌표]")
+            import time
+            time.sleep(args.settle)
+            _snap(cap, f"after_{x}x{y}")
+    return 0
+
+
+def cmd_export(args: argparse.Namespace) -> int:
+    from .store.csv_export import export_csv
+    from .store.datastore import DataStore
+
+    with DataStore(args.db) as store:
+        for path in export_csv(store, args.out):
+            print(f"export: {path}")
+    return 0
+
+
+def cmd_label(args: argparse.Namespace) -> int:
+    import os
+
+    from .controller import label_pending
+    from .store.datastore import DataStore
+
+    with DataStore(args.db) as store:
+        n = label_pending(store, lambda prompt: input(prompt),
+                          opener=os.startfile)
+        print(f"라벨 확정 {n}건")
+    return 0
+
+
+def main(argv: list[str] | None = None) -> int:
+    p = argparse.ArgumentParser(prog="deckscan",
+                                description="동맹 전보(교전) 덱 정보 추출 도구")
+    sub = p.add_subparsers(dest="cmd", required=True)
+
+    pp = sub.add_parser("probe", help="창 진단·스냅샷 (캘리브레이션용)")
+    pp.add_argument("--hwnd", type=lambda s: int(s, 0), default=None)
+    pp.add_argument("--click", type=int, nargs=2, metavar=("X", "Y"),
+                    help="캘리브레이션용 클릭(클라이언트 좌표) 후 재스냅샷")
+    pp.add_argument("--settle", type=float, default=1.5,
+                    help="클릭 후 스냅샷까지 대기 초")
+    pp.set_defaults(func=cmd_probe)
+
+    pe = sub.add_parser("export", help="CSV 내보내기 (battles·deck_long)")
+    pe.add_argument("--db", default=DEFAULT_DB)
+    pe.add_argument("--out", default=DEFAULT_EXPORT_DIR)
+    pe.set_defaults(func=cmd_export)
+
+    pl = sub.add_parser("label", help="pending 식별자 라벨 확정")
+    pl.add_argument("--db", default=DEFAULT_DB)
+    pl.set_defaults(func=cmd_label)
+
+    args = p.parse_args(argv)
+    return args.func(args)
+
+
+if __name__ == "__main__":
+    sys.exit(main())

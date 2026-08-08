@@ -1,0 +1,22 @@
+[project]
+name = "deckscan"
+version = "0.1.0"
+description = "삼국지 전략판 동맹 전보(교전) 덱 정보 추출 도구"
+requires-python = ">=3.12"
+dependencies = [
+    "pillow",
+    "numpy",
+    "opencv-python",
+    "windows-capture",
+    "winocr",
+]
+
+[project.scripts]
+deckscan = "deckscan.cli:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]

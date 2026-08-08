@@ -1,0 +1,243 @@
+# PLAN-20260808-telegram-deck-extract: deckscan 구현 계획
+
+> 문서 유형: `plan`
+> 작업 ID: `20260808-telegram-deck-extract`
+> 상태: `in-progress` (2026-08-08 사용자 구현 착수 승인)
+> 기준선: `v1` (2026-08-08 승인)
+> 작성일: 2026-08-08
+> 최종 갱신: 2026-08-09
+> 관련 문서: [REQ: 요구사항 v1](./requirements.md), [DESIGN: 설계 v1](./design.md), [ADR-001](./decisions/ADR-001-storage-format.md), [ADR-002](./decisions/ADR-002-recognition-strategy.md)
+
+## 요약
+
+- 목적: 승인된 기준선 v1을 작업 단위로 번역한 구현 계획.
+- 현재 결론 또는 상태: TASK-01·02·04~08 완료, TASK-10·11은 오프라인 부분 완료(테스트 33건 성공, 2026-08-09). 남은 작업은 전부 실기 계열 — TASK-03은 관리자 실행기 기동 대기(게임이 관리자 권한이라 입력 전달에 도구 승격 필요).
+- 다음 행동: 관리자 실행기 기동(사용자) → TASK-03 좌표 실측 → TASK-09 → TASK-10(순회) → TASK-11(scan) → TASK-12 → TASK-13.
+
+## 문서 연결
+
+| 방향 | 관계 | 대상 문서 | 대상 항목 | 비고 |
+|---|---|---|---|---|
+| input | baseline | [REQ-20260808-telegram-deck-extract: 요구사항](./requirements.md) | FR-01~07, NFR-01~04, AC-01~06 | 승인 기준선 v1 |
+| input | baseline | [DESIGN-20260808-telegram-deck-extract: 설계](./design.md) | DES-01~10 | 승인 기준선 v1 |
+| input | decision | [ADR-001: 저장 형식](./decisions/ADR-001-storage-format.md) | ADR-001 | TASK-04 근거 |
+| input | decision | [ADR-002: 인식 전략](./decisions/ADR-002-recognition-strategy.md) | ADR-002 | TASK-05~08 근거 |
+
+## 기준선
+
+- 관련 요구사항: [요구사항 v1](./requirements.md) 전체
+- 관련 설계: [설계 v1](./design.md) 전체
+- 관련 ADR·DCR: [ADR-001](./decisions/ADR-001-storage-format.md), [ADR-002](./decisions/ADR-002-recognition-strategy.md). DCR 없음
+
+## 작업 정의
+
+- 목표: 설계 v1의 `deckscan` CLI를 동작·검증 완료 상태로 구현
+- 범위: [요구사항 §범위 포함](./requirements.md#범위) 항목 전체
+- 범위 밖: [요구사항 §범위 제외](./requirements.md#범위) 항목. git 저장소 초기화·커밋은 사용자 요청 시 별도 수행
+- 가정: A-01~A-07(요구사항·설계). TASK-03 실측에서 A-06(참고 이미지 = 실기 배치) 확인
+- 위험: RISK-01~06 — 대응은 [설계 §위험](./design.md#위험)
+
+## 작업 목록
+
+의존 관계: TASK-01 → 02 → {04, 05, 06, 07} → 08(오프라인 계열), TASK-03(실기) → 09 → 10 → 11 → 12 → 13. TASK-05~08은 img/ 픽스처만으로 진행 가능하고, TASK-03의 실측 좌표는 08·09·10의 상수 확정에만 필요하다.
+
+### TASK-01: 프로젝트 뼈대
+
+- 상태: completed (2026-08-08 — `pip install -e .` + 스모크 테스트 성공)
+- 목표: `pyproject.toml`(Python ≥3.12, pillow/numpy/opencv-python/windows-capture/winocr), `src/deckscan/` 패키지 골격, venv, `output/` 제외 규칙
+- 관련 요구사항과 설계: [설계 §시스템 경계와 구조](./design.md#시스템-경계와-구조)
+- 변경 대상: `pyproject.toml`, `src/deckscan/__init__.py`, `.gitignore`
+- 검증 방법: `pip install -e .` 후 `python -c "import deckscan"` 성공. 테스트 체계(unittest) 뼈대 1건 실행
+- 완료 조건: 위 검증 성공
+
+### TASK-02: 플랫폼 계층 복사 (DES-01)
+
+- 상태: completed (2026-08-08 — 5개 파일 무수정 복사+출처 주석, probe로 창 탐색·캡처 실기 확인)
+- 목표: map_search `win/` 4개 모듈 + `watchdog.py`를 출처 주석과 함께 복사, `deckscan.win`으로 임포트 정리
+- 변경 대상: `src/deckscan/win/*.py`, `src/deckscan/watchdog.py`
+- 의존성: TASK-01
+- 검증 방법: TDD 불가(창·캡처 등 환경 의존 — 사유 기록). 임포트 스모크 테스트 + TASK-03에서 실기 확인
+- 완료 조건: 임포트 성공, 원본 대비 변경점이 임포트 경로·출처 주석뿐
+
+### TASK-03: P-02 좌표 실측 + ui_telegram 상수 + UI 마커 템플릿 (DES-02)
+
+- 상태: in-progress → **blocked** (2026-08-09 — 게임이 관리자 권한 실행이라 입력 전달에 도구 승격 필요. 관리자 실행기(tools/agent_shell_admin.bat) 기동 실패 2회: ①한글 경로 타이핑 추정 ②ps1 비BOM UTF-8 인코딩 문제 → ASCII 전용으로 수정 완료, 재시도 전 사용자가 세션 전환 결정. 재개 조건: 관리자 실행기 기동)
+- 목표: probe 도구(스냅샷·마커 점수)를 먼저 이식하고, 실기 화면에서 클릭 좌표(더 보기·동맹·전보·교전 탭), 화면 판정 마커 4종, 목록 영역, 펼친 패널 상대 크롭을 실측해 `ui_telegram.py`와 `assets/templates/ui/` + 자산 대장을 확정
+- 관련 요구사항과 설계: FR-01, [설계 §컴포넌트 DES-02](./design.md#컴포넌트와-책임), 가정 A-06·A-07
+- 변경 대상: `src/deckscan/nav/ui_telegram.py`, `src/deckscan/cli.py`(probe), `assets/templates/ui/`, `assets/templates/README.md`
+- 의존성: TASK-02. **선행 조건: 게임 클라이언트 실행·로그인(사용자 협조)**
+- 위험: 실측 결과가 참고 이미지와 다르면 상수만 재측정(A-06 불일치 시 설계 영향 없음 확인 후 진행)
+- 검증 방법: 각 화면 마커 NCC 점수가 해당 화면에서만 임계(초안 0.7) 이상임을 실측 기록
+- 완료 조건: 상수·템플릿·대장 등록, 마커 판별 실측 증거
+
+### TASK-04: DataStore + battle_key (DES-09, ADR-001)
+
+- 상태: completed (2026-08-08 — TDD Red→Green, 테스트 8건 성공)
+- 목표: [설계 §SQLite 스키마](./design.md#데이터와-인터페이스) 구현, `INSERT OR REPLACE` 멱등, battle_key 생성
+- 의존성: TASK-01
+- 검증 방법(TDD 선행 테스트): ① 스키마 생성·upsert 멱등(같은 레코드 2회 저장 → 1건) ② battle_key 재현성(동일 입력 → 동일 키) ③ AC-05 집계 질의 ④ 대체 키(파싱 실패 시) — 실패 테스트 먼저 작성
+- 완료 조건: 테스트 성공(AC-03 오프라인 부분, AC-05)
+
+### TASK-05: IdentityMatcher (DES-06, ADR-002)
+
+- 상태: completed (2026-08-08 — 테스트 4건 성공: 교차 스크린샷 동일 유저 매칭·상이 유저 구분 실증)
+- 목표: 네임스페이스별 템플릿 NCC 매칭, 신규 ID 발행 + pending 등록, 복수 템플릿 허용
+- 의존성: TASK-01, TASK-04(identities 테이블)
+- 검증 방법(TDD): img/ 크롭 픽스처로 ① 미등록 → 신규 pending ② 동일 크롭 재입력 → 동일 ID ③ 다른 유저 크롭 → 다른 ID(임계 미달) — AC-06 부분
+- 완료 조건: 테스트 성공, 임계값 상수화(TASK-12에서 실측 보정)
+
+### TASK-06: DigitGlyphReader 이식 + 레벨 글리프 (DES-07)
+
+- 상태: completed (2026-08-09 — 픽스처 18건 정확 판독. 발견: 레벨 숫자는 금색이 아니라 **흰색**이라 원본 크림 마스크 그대로 유효. 잔여: 글리프 1·2·3·6·7·8 미수확 — 실기 등장 시 증거 수확, TASK-12에 위임)
+- 목표: map_search DigitReader 이식, 이름 바 레벨 숫자(금색 폰트) 글리프 수확·등록
+- 의존성: TASK-01
+- 검증 방법(TDD): img/4~6 레벨 픽스처(50/49 포함 18건) 판독 테스트
+- 완료 조건: 픽스처 18건 정확 판독
+
+### TASK-07: OcrReader (DES-08)
+
+- 상태: completed (2026-08-09 — 병력 18/18, 일시 3/3, 승 인장 3/3. 이진화에 잡음 성분 제거+여백 패딩 필요함을 실측 반영. 잔여: 무·패 인장 템플릿 미수확 — 실기 위임)
+- 목표: winocr 어댑터 — 병력 수·전투 일시·결과 판독(P-01 검증 전처리 재현), 라벨 제안
+- 의존성: TASK-01
+- 검증 방법(TDD): img/4~6 병력 18건·일시 3건 판독 테스트. 결과(승) 판정은 인장 템플릿 매칭 포함
+- 완료 조건: 픽스처 정확 판독, 판독 실패 시 None 반환 계약
+
+### TASK-08: DeckParser 통합 (DES-05)
+
+- 상태: completed (2026-08-09 — TDD Red→Green, AC-02 인수 테스트 포함 5건 성공, 전체 22건. 유저·동맹 스트립 NCC 임계 0.80 실측 채택 — [work-log](./work-log.md#2026-08-09--task-08-deckparser-tdd))
+- 목표: 펼친 패널 크롭 → `BattleRecord`, `ok|partial|failed` 판정, 실패 크롭 증거 저장
+- 의존성: TASK-04~07 (+패널 상대 좌표는 img/ 실측 초안 → TASK-12에서 확정)
+- 검증 방법(TDD): **AC-02 인수 테스트를 실패 상태로 먼저 작성**(img/4.png → 기대 레코드), img/5·6 확장, 훼손 크롭 주입 시 partial 계속(AC-04 부분, NFR-01)
+- 완료 조건: AC-02 픽스처 테스트 성공
+
+### TASK-09: TelegramNavigator (DES-03)
+
+- 상태: pending
+- 목표: wait_stable·마커 NCC·클릭 전 재검증·타임아웃 이식, 메인→교전 탭 내비게이션(FR-01, NFR-02)
+- 의존성: TASK-02, TASK-03
+- 검증 방법: 판정 유틸은 픽스처 단위 테스트(마커 점수), 내비게이션 자체는 자동 테스트 불가(실기 — 사유 기록) → TASK-12 AC-01
+- 완료 조건: 유틸 테스트 성공, 실기 1회 내비게이션 성공 로그
+
+### TASK-10: ListWalker (DES-04)
+
+- 상태: in-progress (2026-08-09 — 오프라인 부분 완료: 행 재탐지 `detect_row_ys`·펼침 앵커 `find_panel_anchor`·UI 템플릿 2종 수확·픽스처 테스트 5건 성공, [work-log](./work-log.md#2026-08-09--task-10-오프라인-부분-행-재탐지펼침-앵커-tdd). 순회 루프·스크롤·P-03은 TASK-09 이후 실기)
+- 목표: 행 헤더 재탐지, 펼치기·펼침 마커 대기, 배너 스킵, 휠 스크롤·종착 판정(P-03 확인 포함)
+- 의존성: TASK-08, TASK-09
+- 검증 방법: 행 헤더 탐지는 img/3~6 픽스처 단위 테스트(펼침 위치 3종·배너 미탐지), 순회는 실기(TASK-12). P-03 실패 시 순회 전략 변경은 DCR로 반환
+- 완료 조건: 픽스처 테스트 성공, 실기 순회 1회 성공
+
+### TASK-11: Controller + CLI (DES-10)
+
+- 상태: in-progress (2026-08-09 — 오프라인 부분 완료: export CSV 계약·label 흐름·run 요약 TDD 6건 성공, CLI export·label 명령 동작, [work-log](./work-log.md#2026-08-09--task-11-오프라인-부분-exportlabel요약-tdd). scan 오케스트레이션은 TASK-09·10 이후)
+- 목표: `scan|export|label|probe` 명령, run 요약(FR-06), 실패 흐름 표( [설계](./design.md#정상실패복구-흐름) ) 구현, CSV 내보내기
+- 의존성: TASK-04~10
+- 검증 방법(TDD): export CSV 계약 테스트, label 흐름 테스트(pending → confirmed 반영, AC-06 완결), 요약 집계 테스트. scan 전체는 실기
+- 완료 조건: 테스트 성공, `--help` 포함 CLI 동작
+
+### TASK-12: 실기 통합 검증 + 캘리브레이션
+
+- 상태: pending
+- 목표: 실기에서 AC-01(내비게이션), AC-03(연속 2회 실행 멱등), AC-04(실패 요약) 검증, NCC 임계·패널 좌표 보정, verification.md 작성
+- 의존성: TASK-03, TASK-09~11. **선행 조건: 게임 클라이언트 실행·로그인**
+- 검증 방법: [설계 §검증 전략](./design.md#검증-전략) 표대로 실행, 로그·DB 카운트·증거 캡처 기록
+- 완료 조건: AC-01~06 결과가 verification.md에 증거와 함께 기록
+
+### TASK-13: 문서 정리 + 완료 보고
+
+- 상태: pending
+- 목표: README(설치·사용법·label 운영 절차), 자산 대장 최종화, completion.md, 추적성 갱신
+- 의존성: TASK-12
+- 완료 조건: [wf-implement 완료 조건](file:///C:/Users/hippo/.claude/skills/wf-implement/SKILL.md) 충족, 문서 자체 검토 통과
+
+## 계획 트리
+
+<!-- generated — 이 절은 wf-tree 렌더링 생성물이다. 수정은 위 작업 목록에서 하고 트리를 재생성한다. -->
+
+모든 TASK는 작업 루트 직속이다(분해 `상위:` 없음). 아래 간선은 전부 `depends:`(순서 제약)다. `[실기]` = 게임 클라이언트 필요(2026-08-08 사용자 확인: 클라이언트 가동 중 — 선행 조건 충족), `[TDD]` = 실패하는 선행 테스트로 시작.
+
+```text
+[작업] 20260808-telegram-deck-extract — deckscan (기준선 v1) .... in-progress (구현 7/13, ⚠ blocked 1)
+├─ [✓] 설계 단계 (4/4) — 요구사항 v1 · 설계 v1 · ADR-001/002 · ★승인 2026-08-08
+├─ [✓] 구현: TASK-01 프로젝트 뼈대
+├─ [✓] 구현: TASK-02 플랫폼 계층 복사          depends: 01
+├─ [⚠] 구현: TASK-03 좌표 실측·마커 [실기]     depends: 02   ← blocked: 관리자 실행기 기동 필요
+├─ [✓] 구현: TASK-04 DataStore·battle_key [TDD] depends: 01
+├─ [✓] 구현: TASK-05 IdentityMatcher [TDD]     depends: 01, 04
+├─ [✓] 구현: TASK-06 DigitGlyphReader [TDD]    depends: 01   (글리프 1·2·3·6·7·8 실기 수확 잔여)
+├─ [✓] 구현: TASK-07 OcrReader [TDD]           depends: 01   (무·패 인장 실기 수확 잔여)
+├─ [✓] 구현: TASK-08 DeckParser [TDD·AC-02 선행] depends: 04, 05, 06, 07   (패널 상수·임계는 TASK-12 재보정)
+├─ [ ] 구현: TASK-09 TelegramNavigator [실기]  depends: 02, 03
+├─ [◐] 구현: TASK-10 ListWalker·P-03 [실기]    depends: 08, 09   (행 탐지·펼침 앵커 완료, 순회는 실기 대기)
+├─ [◐] 구현: TASK-11 Controller·CLI [TDD]      depends: 04~10   (export·label·요약 완료, scan 연결 대기)
+├─ [ ] 검증: TASK-12 실기 통합 검증 AC-01~06 [실기] depends: 03, 09~11
+└─ [ ] 문서화: TASK-13 README·완료 보고        depends: 12
+```
+
+```mermaid
+flowchart TD
+    D0["✓ 설계 단계 4/4 — 요구사항·설계 v1, ADR-001/002, ★승인"]:::done
+    subgraph G1["기반"]
+        T01["TASK-01 프로젝트 뼈대"]:::done
+        T02["TASK-02 플랫폼 계층 복사"]:::done
+    end
+    subgraph G2["인식·저장 — 오프라인, TDD"]
+        T04["TASK-04 DataStore·battle_key"]:::done
+        T05["TASK-05 IdentityMatcher"]:::done
+        T06["TASK-06 DigitGlyphReader"]:::done
+        T07["TASK-07 OcrReader"]:::done
+        T08["TASK-08 DeckParser (AC-02 테스트 선행)"]:::done
+    end
+    subgraph G3["실기 계열 — 클라이언트 필요"]
+        T03["TASK-03 좌표 실측·마커 ⚠ blocked"]:::gate
+        T09["TASK-09 TelegramNavigator"]:::todo
+        T10["TASK-10 ListWalker (P-03)"]:::todo
+    end
+    subgraph G4["마무리"]
+        T11["TASK-11 Controller·CLI"]:::todo
+        T12["TASK-12 실기 통합 검증 AC-01~06"]:::todo
+        T13["TASK-13 README·완료 보고"]:::todo
+    end
+    D0 -.-> T01
+    T01 -. depends .-> T02
+    T02 -. depends .-> T03
+    T01 -.-> T04
+    T01 -.-> T06
+    T01 -.-> T07
+    T04 -. depends .-> T05
+    T04 -.-> T08
+    T05 -.-> T08
+    T06 -.-> T08
+    T07 -.-> T08
+    T02 -.-> T09
+    T03 -.-> T09
+    T08 -.-> T10
+    T09 -.-> T10
+    T10 -. depends .-> T11
+    T03 -.-> T12
+    T11 -.-> T12
+    T12 -. depends .-> T13
+    classDef done fill:#c8e6c9,stroke:#2e7d32
+    classDef todo fill:#eceff1,stroke:#90a4ae
+    classDef gate fill:#ffcdd2,stroke:#c62828
+```
+
+## 검증 계획
+
+- 단위·인수 테스트: unittest, `tests/` + `tests/fixtures/`(img/ 크롭 파생). TDD — 각 TASK의 선행 테스트를 Red로 시작.
+- 실기 검증: TASK-12에 집약. 결과는 verification.md의 VER-01~(AC별)로 기록.
+- 자동화 불가 항목: AC-01(화면 자동 판정은 하지만 최종 확인은 실기 로그·캡처 증거), 내비게이션·순회 — 사유와 함께 후행 검증.
+
+## 마이그레이션과 롤백
+
+- 신규 프로젝트 — 마이그레이션 없음. `meta.schema_version=1` 기록.
+- 롤백: `output/` 삭제로 데이터 초기화. 코드 변경은 로컬 파일 삭제로 복원(git 미사용 상태 — 초기화 여부는 사용자 결정 대기).
+
+## 인계
+
+- 다음 단계 또는 워크플로우: 구현 실행(이 계획의 TASK-01부터)
+- 시작 조건: 사용자 구현 착수 지시. TASK-03·12의 클라이언트 실행 조건은 충족(2026-08-08 사용자 확인, 상시 사용 허가)
+- 입력 문서와 기준선: [요구사항 v1](./requirements.md), [설계 v1](./design.md), ADR-001·002
+- 완료된 항목: 계획 수립
+- 미완료 항목: TASK-01~13 전체
+- 차단 요인: 없음
+- 다음 행동: TASK-01 착수 → work-log.md 생성
