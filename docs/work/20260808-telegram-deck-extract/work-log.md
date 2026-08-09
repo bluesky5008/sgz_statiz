@@ -216,6 +216,13 @@
 - **[DCR-003](./changes/DCR-003-battle-key.md) 승인(기준선 v4)**: 키 재료를 결정적 요소(일시·유저쌍·장수 구성)로 한정, 병력·레벨은 레코드 값 유지 + **장수별 최신 전투 기준 레벨 조회**(`general_latest_levels`·`generals_<날짜>.csv`) 추가(사용자 요청). 구현 TDD Red→Green: 키 불변성(병력·레벨 변동)·장수 구성 민감성·최신 레벨·CSV 3종 계약. **전체 테스트 61건 성공.**
 - 변경 파일: src/deckscan/nav/ui_telegram.py(ROW_CLICK_X·CLICK_RETURN), src/deckscan/nav/list_walker.py(아코디언 추적·목록 이탈 가드·귀환 복구), src/deckscan/store/datastore.py(make_battle_key v4·general_latest_levels), src/deckscan/store/csv_export.py(generals), tests 4개 파일, img/accordion_s0~2.png·detail.png(신규 픽스처), docs(DESIGN v4·REQ v4·DCR-003)
 
+### 2026-08-09 — DCR-004 승인(기준선 v5): 완전 덱(양측 3장수) 전보만 저장 (TDD)
+
+- 사용자 지시 — "이 시스템은 3장수의 온전한 덱 상태인 경우에만 정보가 유효" → [DCR-004](./changes/DCR-004-full-deck-only.md) 승인: A-03 v2(한쪽이라도 3장수 미만이면 저장 스킵), FR-04 보강, 기준선 v5. 해석 명시: "모두"는 두 번째 문장에 따라 **한쪽이라도** 미달이면 스킵.
+- 구현: ListWalker 저장 게이트(측면별 슬롯 수 <3 → 저장 생략+로그. 전면 실패 fallback 기록은 NFR-01 예외). 파서는 불변 — 측면 반전 등 파서 단위 픽스처(img/7) 유지.
+- 테스트 재구성: img/7(수비 NPC 2슬롯)이 게이트 대상이 되어 walk 계열 3건을 파서 호출 스파이(SpyParser) 방식으로 의도 보존 재작성(불완전 덱 파싱하되 미저장·경계 가드·이중 프레임 확증), NFR-03·재순회 멱등 검증은 AccordionWalkTest(3v3)로 이관. run_scan 성공 테스트 기대치 갱신(처리 0). **전체 61건 성공.**
+- 변경 파일: src/deckscan/nav/list_walker.py(저장 게이트), tests/test_list_walker.py·test_controller.py, docs(REQ v5·DESIGN v5·DCR-004)
+
 ## 설계와 달라진 점
 
 - 경미한 변경(이유 기록, 기준선 의미 불변) 3건 — 2026-08-09 TASK-12:

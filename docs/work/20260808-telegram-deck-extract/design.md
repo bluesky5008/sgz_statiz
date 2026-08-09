@@ -3,7 +3,7 @@
 > 문서 유형: `design`
 > 작업 ID: `20260808-telegram-deck-extract`
 > 상태: `approved`
-> 기준선: `v4` (승인일 2026-08-09 — [DCR-003](./changes/DCR-003-battle-key.md))
+> 기준선: `v5` (승인일 2026-08-09 — [DCR-004](./changes/DCR-004-full-deck-only.md))
 > 작성일: 2026-08-08
 > 최종 갱신: 2026-08-09
 > 관련 문서: [REQ-20260808-telegram-deck-extract: 요구사항](./requirements.md), [ADR-001: 저장 형식](./decisions/ADR-001-storage-format.md), [ADR-002: 인식 전략](./decisions/ADR-002-recognition-strategy.md)
@@ -156,6 +156,7 @@ deckscan probe  [--hwnd N]           # 창 나열, 스냅샷 저장, 마커 점�
 | 화면 전환 타임아웃 | 마커 미등장·`StabilizeTimeout` | 현재 프레임 증거 저장, run `aborted`, 종료 코드 2. 저장된 레코드는 유지 |
 | 클릭 무반응(행 펼침 실패) | 펼침 마커 미등장 | 1회 재시도 후 해당 행 건너뜀 + 증거 저장 (NFR-01) |
 | 필드 인식 실패 | 매칭 임계 미달·판독 실패 | `partial/failed` 저장 + 필드 크롭 증거, 계속 진행 (NFR-01) |
+| 불완전 덱(한쪽 3장수 미만, [DCR-004](./changes/DCR-004-full-deck-only.md)) | 저장 게이트(측면별 슬롯 수) | 저장 생략 + 로그, 계속 진행 (A-03 v2 — 전면 실패 기록은 예외) |
 | 캡처 정지·검은 화면·창 크기 변경 | `CaptureStalled`·Watchdog | run `aborted`, 즉시 중단 (죽은 화면 오判 방지) |
 | 실행 중 새 전보 도착으로 목록 밀림 | — (직접 감지 없음) | `battle_key` 멱등으로 중복 무해. 누락 가능성은 재실행으로 보완 |
 
@@ -242,6 +243,7 @@ deckscan probe  [--hwnd N]           # 창 나열, 스냅샷 저장, 마커 점�
 | 2026-08-09 | DES-04 순회 전략(펼침 판정·안전 클릭 지대), DES-05 측면 라벨 판정 — 기준선 v2 | [DCR-001](./changes/DCR-001-list-traversal.md) 승인 | approved, v2 | 사용자 승인 / Claude 기록 |
 | 2026-08-09 | DES-10 창 확정 절차(`choose_window`)·실패 흐름 다중 창 행 — 기준선 v3 | [DCR-002](./changes/DCR-002-client-selection.md) 승인 | approved, v3 | 사용자 승인 / Claude 기록 |
 | 2026-08-09 | battle_key 재료를 결정적 요소로 한정(병력·레벨 제외), CSV 3종(generals 최신 레벨), 한계 갱신 — 기준선 v4 | [DCR-003](./changes/DCR-003-battle-key.md) 승인 | approved, v4 | 사용자 승인 / Claude 기록 |
+| 2026-08-09 | 저장 게이트 추가 — 양측 3장수 완전 덱만 저장(실패 흐름 표) — 기준선 v5 | [DCR-004](./changes/DCR-004-full-deck-only.md) 승인 | approved, v5 | 사용자 지시·승인 / Claude 기록 |
 
 ## 인계
 

@@ -151,10 +151,11 @@ class RunScanTest(unittest.TestCase):
             code, text = run_scan(store, NavOk(),
                                   self._walker_factory(store, tmp))
             self.assertEqual(code, 0)
-            self.assertIn("처리 2", text)
+            # img/7 두 전보는 수비 2슬롯(NPC) — DCR-004 완전 덱 게이트로 미저장
+            self.assertIn("처리 0", text)
             run = store.get_run(1)
             self.assertEqual(run["status"], "done")
-            self.assertEqual(run["processed"], 2)
+            self.assertEqual(run["processed"], 0)
             store.close()
 
     def test_navigation_failure_aborts_run_with_exit_2(self):

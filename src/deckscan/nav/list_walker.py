@@ -248,6 +248,15 @@ class ListWalker:
             # 직전 펼침 클릭이 새 패널로 소비됨 — 그 행의 재접힘 헤더는 완료 처리
             self._done_rows.add(self._pending_expand)
             self._pending_expand = None
+        if rec.parse_status != "failed":
+            att = sum(1 for s in rec.slots if s.side == "attack")
+            dfd = sum(1 for s in rec.slots if s.side == "defend")
+            if att < 3 or dfd < 3:
+                # 양측 3장수 완전 덱만 유효(A-03 v2, DCR-004) — 결원·NPC 덱은
+                # 저장하지 않는다. 전면 실패 기록(fallback 키)은 예외(NFR-01).
+                log.info("불완전 덱(공 %d·수 %d) — 저장 안 함 (anchor %d)",
+                         att, dfd, anchor_y)
+                return
         self.captures_dir.mkdir(parents=True, exist_ok=True)
         capture = self.captures_dir / f"{rec.battle_key}.png"
         Image.fromarray(np.ascontiguousarray(panel)).save(capture)

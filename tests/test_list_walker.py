@@ -173,10 +173,16 @@ class AccordionWalkTest(unittest.TestCase):
             walker = lw.ListWalker(judge, fi, parser, store, run,
                                    captures_dir=Path(tmp) / "cap")
             s = walker.walk()
-            self.assertEqual(store.battle_count(), 2)   # [7회]·[6회] 패널
+            self.assertEqual(store.battle_count(), 2)   # [7회]·[6회] 패널(3v3)
             b1 = [c for c in fi.clicks if abs(c[1] - (220 + ui.ROW_CLICK_DY)) <= 1]
             self.assertEqual(len(b1), 1)                # 재접힘 [7회] 재클릭 금지
             self.assertEqual(s.skipped, 3)              # 픽스처상 미펼침 3행만
+            for b in store.iter_battles():
+                self.assertTrue(Path(b["capture_path"]).is_file())  # NFR-03
+            walker2 = lw.ListWalker(judge, AccordionInput(capture), parser,
+                                    store, run, captures_dir=Path(tmp) / "cap")
+            walker2.walk()
+            self.assertEqual(store.battle_count(), 2)   # 재순회 멱등(AC-03 오프라인)
             store.close()
 
 
@@ -265,35 +271,42 @@ class StaticScreenStallTest(unittest.TestCase):
             judge.fresh()
 
 
+class SpyParser:
+    """실 파서 위임 + parse 호출 anchor 기록 (저장 게이트와 무관한 의도 검증용)."""
+
+    def __init__(self, parser: DeckParser):
+        self.parser = parser
+        self.anchors: list[int] = []
+
+    def parse(self, frame, anchor):
+        self.anchors.append(anchor)
+        return self.parser.parse(frame, anchor)
+
+
 class WalkTest(unittest.TestCase):
-    def test_walk_parses_visible_expanded_rows_idempotently(self):
-        """img/7 정지 화면 walk: 펼친 행 2개 파싱(3행은 패널 잘림 — 스크롤 몫),
-        스크롤 후 화면 불변 → 종착. 재실행에도 레코드 수 불변(AC-03 오프라인)."""
+    def test_incomplete_decks_walked_but_not_saved(self):
+        """DCR-004(A-03 v2): 한쪽이라도 3장수 미만인 덱(img/7 — 수비 NPC 2슬롯)
+        은 파싱하되 저장하지 않는다. 순회 역학(스크롤·종착·파킹)은 정상 진행."""
         window = np.asarray(Image.open(
             Path(__file__).resolve().parents[1] / "img" / "7.png").convert("RGB"))
         with tempfile.TemporaryDirectory() as tmp:
             store = DataStore(":memory:")
-            parser = DeckParser(store, Path(tmp), evidence_dir=Path(tmp) / "ev")
+            spy = SpyParser(DeckParser(store, Path(tmp),
+                                       evidence_dir=Path(tmp) / "ev"))
             judge = ScreenJudge(FakeCapture(window), (2544, 657))
             fi = FakeInput()
             run = store.create_run()
-            walker = lw.ListWalker(judge, fi, parser, store, run,
+            walker = lw.ListWalker(judge, fi, spy, store, run,
                                    captures_dir=Path(tmp) / "cap")
             s = walker.walk()
-            self.assertEqual(s.processed, 2)
-            self.assertEqual(store.battle_count(), 2)
-            self.assertEqual(len(fi.wheels), 1)       # 스크롤 1회 → 불변 → 종착
-            self.assertEqual(fi.clicks, [])           # 접힌 행 없음 — 클릭 불필요
+            self.assertEqual(len(spy.anchors), 2)      # 펼친 두 행 파싱(3행은 잘림)
+            self.assertEqual(store.battle_count(), 0)  # 불완전 덱 — 저장 스킵
+            self.assertEqual(s.processed, 0)
+            self.assertEqual(len(fi.wheels), 1)        # 스크롤 1회 → 불변 → 종착
+            self.assertEqual(fi.clicks, [])            # 접힌 행 없음 — 클릭 불필요
             # 스크롤 후 커서를 목록 밖에 파킹한다 — 호버가 패널을 확대 렌더로
             # 바꿔 쓰레기 파싱을 만든다(2026-08-09 실기 결함 E, panel_4ffae5).
             self.assertEqual(fi.moves, [ui.MOUSE_PARK])
-            for b in store.iter_battles():
-                self.assertTrue(Path(b["capture_path"]).is_file())  # NFR-03
-
-            walker2 = lw.ListWalker(judge, fi, parser, store, run,
-                                    captures_dir=Path(tmp) / "cap")
-            walker2.walk()
-            self.assertEqual(store.battle_count(), 2)  # 멱등
             store.close()
 
     def test_top_boundary_row_skipped(self):
@@ -305,13 +318,15 @@ class WalkTest(unittest.TestCase):
         rolled[:100, :200] = window[:100, :200]  # 화면 제목 마커 보존(이탈 가드 회피)
         with tempfile.TemporaryDirectory() as tmp:
             store = DataStore(":memory:")
-            parser = DeckParser(store, Path(tmp), evidence_dir=Path(tmp) / "ev")
+            spy = SpyParser(DeckParser(store, Path(tmp),
+                                       evidence_dir=Path(tmp) / "ev"))
             judge = ScreenJudge(FakeCapture(rolled), (2544, 657))
             run = store.create_run()
-            walker = lw.ListWalker(judge, FakeInput(), parser, store, run,
+            walker = lw.ListWalker(judge, FakeInput(), spy, store, run,
                                    captures_dir=Path(tmp) / "cap")
-            s = walker.walk()
-            self.assertEqual(s.processed, 1)     # 경계 행 제외, 2행만
+            walker.walk()
+            self.assertTrue(all(a >= ui.LIST_REGION[1] for a in spy.anchors))
+            self.assertEqual(len(spy.anchors), 1)   # 2행만(1행 가드·3행 잘림)
             store.close()
 
     def test_invalid_render_is_not_saved(self):
@@ -350,14 +365,16 @@ class WalkTest(unittest.TestCase):
             b[y0:y0 + 60, 1200:1260].astype(int) + 60, 0, 255).astype(np.uint8)
         with tempfile.TemporaryDirectory() as tmp:
             store = DataStore(":memory:")
-            parser = DeckParser(store, Path(tmp), evidence_dir=Path(tmp) / "ev")
+            spy = SpyParser(DeckParser(store, Path(tmp),
+                                       evidence_dir=Path(tmp) / "ev"))
             judge = ScreenJudge(FlickerCapture(a, b), (2544, 657))
             run = store.create_run()
-            walker = lw.ListWalker(judge, FakeInput(), parser, store, run,
+            walker = lw.ListWalker(judge, FakeInput(), spy, store, run,
                                    captures_dir=Path(tmp) / "cap")
-            s = walker.walk()
-            self.assertEqual(s.processed, 1)           # 2행만
-            self.assertEqual(store.battle_count(), 1)
+            walker.walk()
+            rows = lw.detect_row_ys(a[31:688, 1:2545])
+            self.assertNotIn(lw.row_anchor(rows[0]), spy.anchors)  # 미안정 — 미파싱
+            self.assertIn(lw.row_anchor(rows[1]), spy.anchors)     # 안정 — 파싱
             store.close()
 
 

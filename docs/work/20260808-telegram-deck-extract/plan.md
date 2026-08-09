@@ -26,9 +26,9 @@
 
 ## 기준선
 
-- 관련 요구사항: [요구사항 v4](./requirements.md) 전체 (2026-08-09, DCR-003 동기화)
-- 관련 설계: [설계 v4](./design.md) 전체 (2026-08-09, DCR-003)
-- 관련 ADR·DCR: [ADR-001](./decisions/ADR-001-storage-format.md), [ADR-002](./decisions/ADR-002-recognition-strategy.md), [DCR-001](./changes/DCR-001-list-traversal.md)(승인 2026-08-09 — 순회 전략·측면 매핑·A-02), [DCR-002](./changes/DCR-002-client-selection.md)(승인 2026-08-09 — FR-08·AC-07 창 동적 탐지·선택 → TASK-14), [DCR-003](./changes/DCR-003-battle-key.md)(승인 2026-08-09 — battle_key 결정적 재료 한정·generals CSV)
+- 관련 요구사항: [요구사항 v5](./requirements.md) 전체 (2026-08-09, DCR-004)
+- 관련 설계: [설계 v5](./design.md) 전체 (2026-08-09, DCR-004)
+- 관련 ADR·DCR: [ADR-001](./decisions/ADR-001-storage-format.md), [ADR-002](./decisions/ADR-002-recognition-strategy.md), [DCR-001](./changes/DCR-001-list-traversal.md)(순회 전략·측면 매핑·A-02), [DCR-002](./changes/DCR-002-client-selection.md)(FR-08·AC-07 창 선택 → TASK-14), [DCR-003](./changes/DCR-003-battle-key.md)(battle_key 결정적 재료 한정·generals CSV), [DCR-004](./changes/DCR-004-full-deck-only.md)(완전 덱만 저장 — A-03 v2, 모두 2026-08-09 승인)
 
 ## 작업 정의
 
