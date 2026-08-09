@@ -55,8 +55,13 @@ class DeckParser:
             else root / "output" / "evidence"
 
     def parse(self, frame: np.ndarray,
-              anchor_y: int = ui.PANEL_ANCHOR_Y) -> BattleRecord:
-        """클라이언트 프레임과 패널 앵커 y(행 헤더 top)로 전보 1건을 파싱한다."""
+              anchor_y: int = ui.PANEL_ANCHOR_Y) -> BattleRecord | None:
+        """클라이언트 프레임과 패널 앵커 y(행 헤더 top)로 전보 1건을 파싱한다.
+
+        무효 렌더(확대 호버 렌더 등 — 표준 UI 크롬인 일시·병력이 전부 죽은
+        패널)는 전보가 아니므로 None을 반환한다. 개별 필드 실패는 그대로
+        partial/failed 레코드다(NFR-01).
+        """
         dy = anchor_y - ui.PANEL_ANCHOR_Y
         panel = _crop(frame, ui.PANEL_REGION, dy)
         pid = hashlib.sha1(panel.tobytes()).hexdigest()[:12]
@@ -133,6 +138,13 @@ class DeckParser:
                 continue                       # 정보가 전혀 없는 슬롯은 남기지 않는다
             slots.append(SlotRecord(side, slot_no, gid, level, troops, score))
 
+        if battle_time is None and slots and \
+                all(s.troops is None for s in slots):
+            # 무효 렌더 게이트(2026-08-09 실기, img/panel_4ffae5): 일시와 모든
+            # 병력은 게임이 항상 그리는 표준 크롬이라 동시 전멸은 전보 훼손이
+            # 아니라 렌더 이상(확대 호버 등)이다. 저장하면 쓰레기 키가 남는다.
+            log.warning("무효 렌더 판정 %s: 실패 필드 %s", pid, ", ".join(failed))
+            return None
         if battle_time is None and attacker_id is None \
                 and defender_id is None and not slots:
             key, status = make_fallback_key(panel.tobytes()), "failed"

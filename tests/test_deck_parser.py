@@ -161,6 +161,20 @@ class DeckParserTest(unittest.TestCase):
         self.assertEqual(rec.attacker_id, rid)
         self.assertFalse(new)  # 이미 등록된 ID와 매칭(신규 아님)
 
+    def test_invalid_render_returns_none(self):
+        """무효 렌더 게이트(TASK-12 결함 E): 확대(호버) 렌더는 레코드가 아니다.
+
+        2026-08-09 실기 run2: 헤더는 정위치인데 내용이 확대된 렌더가 이중 프레임
+        확증을 통과해 일시·병력 전 필드 실패의 쓰레기 partial로 저장됐다
+        (img/panel_4ffae5.png). 일시 없음 + 슬롯 존재 + 병력 전원 실패 조합은
+        전보 훼손(AC-04 대상)이 아니라 렌더 이상이므로 저장하지 않는다.
+        """
+        frame = np.zeros((657, 2544, 3), dtype=np.uint8)
+        panel = np.asarray(Image.open(IMG / "panel_4ffae5.png").convert("RGB"))
+        x0, y0, x1, y1 = ui.PANEL_REGION
+        frame[y0:y1, x0:x1] = panel
+        self.assertIsNone(self.parser.parse(frame, ui.PANEL_ANCHOR_Y))
+
     def test_component_exception_gives_failed_fallback_key(self):
         """NFR-01: 구성요소 예외에도 파서는 레코드를 반환하고 대체 키로 저장 가능."""
         class Boom:

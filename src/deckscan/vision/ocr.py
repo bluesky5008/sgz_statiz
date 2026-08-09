@@ -23,8 +23,10 @@ RESULT_BY_NAME = {"win": "승", "draw": "무", "lose": "패"}
 RESULT_THRESHOLD = 0.75
 _BIN_THRESHOLD = 150
 
+# 시각 구분자는 선택적 — 렌더 변형에서 콜론이 소실되면 "0134:42"처럼 붙어
+# 인식된다(2026-08-09 실기 panel_fa584b). 시·분·초는 항상 2자리 렌더다.
 _DATE_RE = re.compile(
-    r"(\d{4})\D{0,3}(\d{1,2})\D{0,3}(\d{1,2})\D{0,4}(\d{1,2})\s*[:;]\s*(\d{1,2})\s*[:;]\s*(\d{1,2})")
+    r"(\d{4})\D{0,3}(\d{1,2})\D{0,3}(\d{1,2})\D{0,4}(\d{2})\s*[:;.]?\s*(\d{2})\s*[:;.]?\s*(\d{2})")
 
 
 def _upscale(crop: np.ndarray, scale: int) -> Image.Image:
@@ -40,6 +42,10 @@ def _binarize(crop: np.ndarray, scale: int) -> Image.Image:
     """
     gray = np.asarray(_upscale(crop, scale).convert("L")).astype(np.int16)
     text = (gray >= _BIN_THRESHOLD).astype(np.uint8)   # 밝은 글자=1
+    # 렌더 변형으로 획이 어두워지면 '0'이 좌우 호 2개로 끊긴다(2026-08-09 실기
+    # panel_081141: OCR이 '()'로 오독) — 닫힘 연산으로 끊긴 획을 재접합한다.
+    # 커널 5px는 획 틈만 잇는다(숫자 자간·'0' 중앙 구멍은 업스케일에서 그보다 넓다).
+    text = cv2.morphologyEx(text, cv2.MORPH_CLOSE, np.ones((5, 5), np.uint8))
     n, labels, stats, _ = cv2.connectedComponentsWithStats(text, connectivity=8)
     keep = np.zeros_like(text)
     min_area = 10 * scale * scale
@@ -66,10 +72,14 @@ class OcrReader:
         """병력 수 등 흰색 숫자 판독. 실패 시 None.
 
         숫자 자간이 넓으면 OCR이 "104 33"처럼 분리 인식한다(5.png 실측) —
-        숫자 사이 공백·구두점은 접합한 뒤 최장 런을 취한다.
+        숫자 사이 공백·구두점은 접합한 뒤 최장 런을 취한다. 획이 끊긴 '0'은
+        '()'로 인식된다(2026-08-09 실기) — '0'으로 되돌린다. 4배에서 인식을
+        거부하는 렌더 변형이 3배에서는 정독되는 사례가 있어(panel_e1423b 실측)
+        3배 이진화를 마지막 폴백으로 둔다.
         """
-        for img in (_binarize(crop, 4), _upscale(crop, 4)):
-            text = re.sub(r"(?<=\d)[\s,.]+(?=\d)", "", self._ocr(img))
+        for img in (_binarize(crop, 4), _upscale(crop, 4), _binarize(crop, 3)):
+            text = self._ocr(img).replace("()", "0")
+            text = re.sub(r"(?<=\d)[\s,.]+(?=\d)", "", text)
             runs = re.findall(r"\d+", text)
             if runs:
                 return int(max(runs, key=len))

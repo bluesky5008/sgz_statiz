@@ -68,6 +68,27 @@ class ScreenJudge:
     def client_offset(self, frame: np.ndarray) -> tuple[int, int]:
         return frame_client_offset(frame.shape, self.client_size)
 
+    def fresh(self) -> np.ndarray:
+        """grab_fresh + 정지 화면 오판 보정.
+
+        WGC는 화면 변화가 없으면 프레임을 보내지 않으므로 완전 정지 화면(목록
+        종착 등)이 CaptureStalled로 오판된다(2026-08-09 실기 결함 C). 창이 살아
+        있으면 마지막 프레임을 정적 화면으로 수용하고, 창이 사라졌으면 실제
+        정지로 보고 다시 던진다(설계 실패 흐름의 중단 정책 유지).
+        """
+        try:
+            return self.capture.grab_fresh()
+        except RuntimeError as exc:
+            from ..win.capture import CaptureStalled
+            if not isinstance(exc, CaptureStalled):
+                raise
+            hwnd = getattr(self.capture, "hwnd", None)
+            if hwnd is not None:
+                from ..win import win32
+                if not win32.user32.IsWindow(hwnd):
+                    raise
+            return self.capture.grab()
+
     def crop_client(self, frame: np.ndarray,
                     rect: tuple[int, int, int, int]) -> np.ndarray:
         ox, oy = self.client_offset(frame)
@@ -85,10 +106,10 @@ class ScreenJudge:
                     fraction: float = _STABLE_FRACTION) -> np.ndarray:
         """연속 프레임 변화율이 임계 미만인 상태가 min_still회 이어질 때까지 대기."""
         deadline = time.monotonic() + timeout
-        prev = self.capture.grab_fresh()
+        prev = self.fresh()
         still = 0
         while time.monotonic() < deadline:
-            cur = self.capture.grab_fresh()
+            cur = self.fresh()
             still = still + 1 if changed_fraction(prev, cur) < fraction else 0
             prev = cur
             if still >= min_still:
@@ -100,10 +121,10 @@ class ScreenJudge:
                     timeout: float = 5.0, what: str = "마커") -> np.ndarray:
         """마커의 등장(present=True)/소멸을 폴링 대기하고 마지막 프레임을 반환."""
         deadline = time.monotonic() + timeout
-        frame = self.capture.grab_fresh()
+        frame = self.fresh()
         while time.monotonic() < deadline:
             if (self.marker_score(frame, rect, template) >= threshold) == present:
                 return frame
             time.sleep(0.1)
-            frame = self.capture.grab_fresh()
+            frame = self.fresh()
         raise NavigationTimeout(f"{what} {'등장' if present else '소멸'} 대기 시간 초과 ({timeout}s)")

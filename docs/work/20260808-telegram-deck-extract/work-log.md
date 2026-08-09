@@ -11,8 +11,8 @@
 ## 요약
 
 - 목적: [구현 계획](./plan.md)의 TASK 수행 기록과 재개 지점 유지.
-- 현재 결론 또는 상태: **TASK-01~09 + 10·11 전체 구현 완료**(기준선 v2, DCR-001), 오프라인 테스트 **44건 성공**. 실기 scan 동작 실증(전체 목록 순회·저장·멱등·요약). TASK-12 진행 중 — 세션 마감 시점에 AC-03용 2회 연속 scan(cmd_0018)이 관리자 실행기에서 실행 중이며 결과는 res_0018.log·DB에 남는다. 실기 결함 2건 조사 대기(아래 재개 지점).
-- 다음 행동: [재개 지점](#재개-지점) — cmd_0018 결과 확인부터.
+- 현재 결론 또는 상태: **TASK-01~11 완료**(기준선 v2, DCR-001). TASK-12 진행 중 — cmd_0018 분석으로 실기 결함을 재분류(결함 B~E)하고 **오프라인 수정 전부 완료**(OCR 오독 3종, 무효 렌더 게이트, 상단 경계 가드, 마우스 파킹, 정지 화면 오판). 오프라인 테스트 **51건 성공**. 남은 것: 결함 A(묶음 행 펼침) 실측과 AC-01~06 실기 검증 — 관리자 실행기 재기동 필요(유휴 300분 초과로 종료됨).
+- 다음 행동: [재개 지점](#재개-지점) — 관리자 실행기 재기동 후 결함 A 실측부터.
 
 ## 문서 연결
 
@@ -27,10 +27,10 @@
 
 ## 현재 상태
 
-- 진행 중인 작업: TASK-12 (실기 통합 검증 — AC-03 2회 scan이 cmd_0018로 실행 중, 결함 2건 조사 대기)
-- 마지막 완료 작업: TASK-10·11 완결(순회 루프·scan 연결, 2026-08-09)
+- 진행 중인 작업: TASK-12 (실기 통합 검증 — 오프라인 수정 완료, 결함 A 실측·AC 판정 남음)
+- 마지막 완료 작업: cmd_0018 분석·결함 B~E 오프라인 수정(2026-08-09, 테스트 51건)
 - 작업 트리 상태: 구현 11/13 완료 — [plan.md](./plan.md#계획-트리)
-- 차단 요인: 없음. 관리자 실행기 가동 중(pid 30648, 유휴 300분 후 자동 종료 — 죽었으면 사용자가 tools\agent_shell_admin.bat 재실행). 다음 명령 순번: cmd_0019.
+- 차단 요인: **관리자 실행기 종료됨**(pid 30648, 유휴 300분 초과 — 사용자가 tools\agent_shell_admin.bat 관리자 실행 필요). 다음 명령 순번: cmd_0019.
 
 ## 수행 기록
 
@@ -176,38 +176,50 @@
 - 잔여(TASK-11): `scan` 명령 오케스트레이션 — TASK-09·10 실기 부분 이후.
 - 변경 파일: src/deckscan/store/csv_export.py(신규), src/deckscan/controller.py(신규), src/deckscan/store/datastore.py(battle_rows·경로 수정), src/deckscan/cli.py(export·label), tests/test_controller.py(신규), tests/test_datastore.py(DbPathTest)
 
+### 2026-08-09 — TASK-12: cmd_0018 분석, 실기 결함 재분류(B~E)와 오프라인 수정 (TDD)
+
+- **cmd_0018 최종 분석**: run#1 aborted — 귀환×2(고정 대기 blind 클릭) 후에도 메인 화면 판정 실패(WrongScreen, A-01 전제 미충족). run#2 aborted — 처리 24·저장 24건 후 목록 종착의 완전 정지 화면에서 CaptureStalled(아래 결함 C). DB 잔존: 고유 전보 15건(ok 12·partial 3) — 저장 레코드 유지는 설계대로 동작.
+- **DB·captures·evidence 3원 대조로 결함 재분류** (재개 지점의 "결함 B·C" 가설을 실증 데이터로 교체):
+  - **결함 D(신규·핵심)**: 같은 전보의 재렌더 간 픽셀 변형(상이 비율 12~23%, 정렬 최적 dy=0 — 1px 시프트가 아니라 게임의 렌더 변형)으로 OCR 결과가 갈라져 **같은 전보가 다른 battle_key로 중복 저장**(FR-05·AC-03 직접 위협). 실증 3쌍: ① `10600→"106()()"`·`10000→"1()00()"` — '0'의 상하 획이 어두워져 이진화에서 좌우 호만 남아 괄호로 오독, 'ok' 중복 ② 일시 콜론 소실 `"0134:42"` → 정규식 불일치 None, partial 중복 ③ 4배 스케일에서 OCR 전면 인식 거부(3배는 정독), partial 중복. 전부 저장 캡처로 **결정적 재현** 확인.
+  - **결함 E(신규)**: "목록 상단 경계 패널"로 추정했던 쓰레기 레코드의 실체는 **헤더 정위치·내용 확대 렌더**(img/panel_4ffae5 — 일시·병력 줄이 크롭 밖으로 밀림, side_label+일시+병력 6 전부 실패, 초상 NCC 1.0으로 식별자 6종 신규 등록). 원인 추정: PostMessage 입력이라 게임이 인지하는 호버 위치 = 마지막 WM_MOUSEMOVE 좌표(휠·클릭 지점이 목록 위) → 호버 확대. 정지 렌더라 이중 프레임 확증을 통과했다. 실기 확증은 검증 단계에서.
+  - **결함 C**: WGC는 화면 변화가 없으면 프레임을 보내지 않음 → 완전 정지 화면(종착)에서 grab_fresh 기아 → STALE_LIMIT 도달 → 죽은 화면으로 오판 중단.
+  - **결함 B(가드)**: 상단 경계 잘림 가설 자체는 미실증이나 방어 가드는 계획대로 채택.
+- **수정** (전부 TDD Red→Green, 오독 실기 캡처 4장을 `img/panel_*.png` 회귀 픽스처로 영구화):
+  1. [ocr.py](../../../src/deckscan/vision/ocr.py): 이진화에 닫힘 연산(끊긴 획 재접합, 5px — 자간·'0' 구멍보다 좁음), `"()"→"0"` 복원, 일시 시각 구분자 선택화(`\d{2}` 3련), 3배 이진화 폴백. 오독 4건 전부 정독 + 기존 픽스처 회귀 없음.
+  2. [deck_parser.py](../../../src/deckscan/vision/deck_parser.py): **무효 렌더 게이트** — 일시 None + 슬롯 존재 + 병력 전원 None(표준 UI 크롬 동시 전멸)은 전보 훼손이 아니라 렌더 이상 → `parse()`가 None 반환(반환형 `BattleRecord | None`), 저장 안 함. 개별 필드 실패는 여전히 partial/failed(NFR-01 유지).
+  3. [list_walker.py](../../../src/deckscan/nav/list_walker.py): parse None 처리(픽셀 서명으로 동일 렌더 재파싱 차단, 정상 재렌더는 다음 패스에서 파싱), 상단 경계 가드(`icon_y < LIST_REGION top` skip — 스크롤은 아래로만 가므로 이미 처리된 행), 휠·펼침 클릭 후 `MOUSE_PARK` 이동.
+  4. [navigator.py](../../../src/deckscan/nav/navigator.py): `ScreenJudge.fresh()` — CaptureStalled 시 창 생존(IsWindow)이면 마지막 프레임을 정적 화면으로 수용, 창 소멸이면 재던짐(설계 실패 흐름의 중단 정책 유지, 판별만 정밀화). wait_stable·wait_marker·telegram 재검증·walker 이중 프레임 확증이 모두 이 경유로 전환.
+  5. [ui_telegram.py](../../../src/deckscan/nav/ui_telegram.py): `MOUSE_PARK` (400,350) — 목록 밖 배경, 이동 전용(실기 무해 확인은 검증 단계에서).
+- 결과: **전체 테스트 51건 성공** (44 + 신규 7: OCR 렌더 변형 2, 무효 렌더 게이트 1, 경계 가드 1, 무효 렌더 skip 1, 정지 화면 2).
+- 변경 파일: src/deckscan/vision/ocr.py·deck_parser.py, src/deckscan/nav/list_walker.py·navigator.py·telegram.py·ui_telegram.py, tests/test_ocr.py·test_deck_parser.py·test_list_walker.py, img/panel_{081141,e1423b,fa584b,4ffae5}.png(신규 픽스처)
+
 ## 설계와 달라진 점
 
-- 없음(기준선 준수). 구현 세부 확정 2건: ① 레벨 숫자 마스크는 원본 크림 마스크 재사용(금색 가정 기각 — 내부 세부사항), ② OCR 이진화 전처리에 성분 필터+패딩 추가(내부 세부사항).
+- 경미한 변경(이유 기록, 기준선 의미 불변) 3건 — 2026-08-09 TASK-12:
+  1. CaptureStalled 처리 정밀화: 설계 실패 흐름 표의 "캡처 정지 → 중단" 정책은 유지하되, WGC의 무변화-무프레임 특성으로 인한 정지 화면 오판을 창 생존 검사로 걸러낸다(`ScreenJudge.fresh`). 플랫폼 계층(capture.py)은 무수정 유지(DES-01).
+  2. `DeckParser.parse` 반환형 `BattleRecord | None` — 무효 렌더(표준 크롬 전멸)는 레코드가 아니다. NFR-01의 의미(개별 전보 실패는 기록하고 계속)는 불변 — 렌더 이상은 전보 실패가 아니다.
+  3. 순회 조작 후 커서 파킹(MOUSE_PARK) — 내부 입력 위생, 화면 이동 흐름 불변.
+- 기존 확정 2건: ① 레벨 숫자 마스크는 원본 크림 마스크 재사용(금색 가정 기각 — 내부 세부사항), ② OCR 이진화 전처리에 성분 필터+패딩 추가(내부 세부사항).
 
 ## 미완료 항목
 
-- TASK-03(blocked — 관리자 실행기 대기), TASK-09, TASK-10(실기 부분), TASK-11~13
-- 실기 수확 잔여: 레벨 글리프 1·2·3·6·7·8, 무·패 인장
-- TASK-12 확인 항목: row_icon 템플릿의 동맹 문장 여부, 유저·동맹 NCC 임계 0.80 재보정, 빈 카드 칸 판정 실기 확인
+- TASK-12(진행 중 — 결함 A 실측, 호버 확대·파킹 지점 실기 확증, AC-01~06 판정·검증 기록), TASK-13
+- 실기 수확 잔여: 레벨 글리프 6·7 (등장 시 partial+증거로 안전 처리됨)
+- TASK-12 확인 항목: row_icon 템플릿의 동맹 문장 여부, 유저·동맹 NCC 임계 0.80 재보정, 빈 카드 칸 판정 실기 확인, SCROLL_NOTCHES 보정
 
 ## 재개 지점
 
-- 다음 작업 (TASK-12 계속):
-  1. **cmd_0018 최종 결과 분석** (세션 마감 직전 완료됨): 1차 scan **내비게이션 단계 aborted**(exit 2, 0건 — 귀환×2가 메인에 도달하지 못한 듯, res_0018.log의 run#1 트레이스 확인), 2차 scan **순회 중 예외로 aborted**(exit 2 — 처리 24건·저장 24건까지 진행 후 중단, **결함 C**: res_0018.log의 run#2 트레이스에서 원인 확인 — StabilizeTimeout(스크롤 연출 미안정) 또는 파서 예외 후보). 저장 레코드는 설계대로 유지됨. AC-03 판정은 결함 수정 후 재실행 카운트 비교로 수행.
-  2. **결함 A — 접힌 묶음 행 펼침 클릭 무효**: ROW_CLICK_X(우측 화살표 열, 클라이언트 x=1771) 클릭이 묶음 행을 펼치지 못해 전부 skip됨. 실기 probe로 유효 클릭 지대 실측(후보: 헤더의 텍스트 없는 빈 구간, 표시 x≈1025~1075 → 클라이언트 ≈1303. **주의: 중앙 위치 링크(표시 945~1055 부근 단건 행)·유저명·동맹명 클릭 금지** — 오클릭 시 월드맵 이동). 묶음 행 전용이므로 [N회 승] 텍스트(중앙)와 수비 유저명 사이 빈 구간이 후보.
-  3. **결함 B — 목록 경계 패널 가드**: 스크롤로 목록 상단·경계에 걸친 패널이 파싱돼 광범위 실패 레코드 1건 발생(side_label 포함 전 필드) — `_pass`에 앵커 하한 가드(`anchor < LIST_REGION[1]` skip) 추가 + 재현 테스트.
-  4. 수정 후 DB 초기화(output/deckscan.db·captures·evidence 삭제) → **연속 2회 scan**으로 AC-01·03·04 판정 → verification.md 작성(VER-01~06, 증거: res 로그·DB 카운트·captures).
-  5. TASK-13: README 최종화·completion.md·추적성 갱신.
-- 먼저 확인할 사항: 이 문서의 2026-08-09 기록 전체(특히 TASK-10 완결부·DCR-001), [plan.md](./plan.md), [DCR-001](./changes/DCR-001-list-traversal.md)
-- 환경: 관리자 실행기(유휴 300분 자동 종료 — shell_status.txt 확인, 죽었으면 사용자가 tools\agent_shell_admin.bat 관리자 실행). 다음 명령 순번 cmd_0019. 게임 클라이언트 상시 사용 허가(2026-08-09 사용자).
+- 다음 작업 (TASK-12 계속 — 실기, **관리자 실행기 재기동 필요**):
+  1. **결함 A — 접힌 묶음 행 펼침 클릭 무효**: ROW_CLICK_X(우측 화살표 열, 클라이언트 x=1771) 클릭이 묶음 행을 펼치지 못해 전부 skip됨. 실기 probe로 유효 클릭 지대 실측(후보: 헤더의 텍스트 없는 빈 구간, 표시 x≈1025~1075 → 클라이언트 ≈1303. **주의: 중앙 위치 링크(표시 945~1055 부근 단건 행)·유저명·동맹명 클릭 금지** — 오클릭 시 월드맵 이동). 가설 추가(2026-08-09): 클릭의 WM_MOUSEMOVE가 호버 확대를 유발해 화살표가 이동했을 가능성 — 헤더 라인(확대에도 고정)의 빈 구간 클릭이 유리.
+  2. **실기 확증 2건**: ① 호버 확대 가설 — probe로 목록 위 커서 정지 상태 스냅샷과 MOUSE_PARK 상태 스냅샷 비교, ② MOUSE_PARK (400,350) 이동이 무해한지(툴팁·하이라이트 없음) 확인.
+  3. DB 초기화(output/deckscan.db·captures·evidence 삭제) → **연속 2회 scan**(각 scan 전 메인 복귀는 대화형으로 확인 — cmd_0018 run#1처럼 blind 귀환 클릭은 취약) → AC-01·03·04 판정 → 검증 결과를 이 문서에 verification 유형으로 기록(VER-01~06, 증거: res 로그·DB 카운트·captures).
+  4. TASK-13: README 최종화·completion 기록·추적성 갱신.
+- 먼저 확인할 사항: 이 문서의 2026-08-09 결함 재분류 절(결함 B~E 수정 완료 — 실기에서 재발 여부 관찰), [plan.md](./plan.md), [DCR-001](./changes/DCR-001-list-traversal.md)
+- 환경: 관리자 실행기 종료됨 — 사용자가 tools\agent_shell_admin.bat 관리자 실행 후 shell_status.txt `elevated=True` 확인. 다음 명령 순번 cmd_0019. 게임 클라이언트 상시 사용 허가(2026-08-09 사용자, 羊커리 클라이언트만).
 - 필요한 명령 또는 파일:
 
 ```powershell
-.\.venv\Scripts\python.exe -m unittest discover -s tests   # 44건 green 기대
-Get-Content output\agent_shell\res_0018.log | Select-Object -Last 20   # 2회 scan 결과
+.\.venv\Scripts\python.exe -m unittest discover -s tests   # 51건 green 기대
 # 실행기 프로토콜: output\agent_shell\cmd_0019.txt 작성 → res_0019.log/done_0019.txt 대기
-# scan 시작 전제: 메인 화면(귀환 ×2로 복귀 가능, 클라이언트 (2499,24) 클릭)
+# scan 시작 전제: 메인 화면(귀환 클릭 = 클라이언트 (2499,24), 도달은 스냅샷으로 확인)
 ```
-
-### 다음 세션 시작 프롬프트 (사용자용)
-
-> sgz_statiz 프로젝트(deckscan)의 진행 중 작업을 재개하자.
-> `docs/work/20260808-telegram-deck-extract/work-log.md`의 재개 지점과 `plan.md`를 읽고 wf-implement 워크플로우로 TASK-12부터 계속 진행해줘.
-> 순서: 지난 세션에 걸어둔 2회 scan(cmd_0018) 결과 확인 → 결함 A(묶음 행 펼침 클릭 실측)·결함 B(목록 경계 가드) 수정 → AC-01~06 실기 검증·verification.md → TASK-13 완료 보고.
-> 게임 클라이언트는 켜져 있고 언제든 사용해도 된다. 관리자 실행기가 죽어 있으면 내가 다시 실행하겠다.

@@ -110,12 +110,51 @@ class FakeInput:
     def __init__(self):
         self.clicks: list[tuple[int, int]] = []
         self.wheels: list[tuple[int, int, int]] = []
+        self.moves: list[tuple[int, int]] = []
 
     def click(self, x, y):
         self.clicks.append((x, y))
 
     def wheel(self, x, y, notches):
         self.wheels.append((x, y, notches))
+
+    def move(self, x, y):
+        self.moves.append((x, y))
+
+
+class StalledCapture:
+    """완전 정지 화면 재현 — grab_fresh는 CaptureStalled, grab은 마지막 프레임."""
+
+    def __init__(self, frame: np.ndarray, hwnd: int | None = None):
+        self.frame = frame
+        if hwnd is not None:
+            self.hwnd = hwnd
+
+    def grab_fresh(self, timeout: float = 2.0) -> np.ndarray:
+        from deckscan.win.capture import CaptureStalled
+        raise CaptureStalled("정지")
+
+    def grab(self) -> np.ndarray:
+        return self.frame
+
+
+class StaticScreenStallTest(unittest.TestCase):
+    """TASK-12 결함 C(2026-08-09 실기): WGC는 화면 변화가 없으면 프레임을 보내지
+    않아 완전 정지 화면(목록 종착)이 CaptureStalled로 오판돼 run이 aborted됐다.
+    창이 살아 있으면 정적 화면=안정으로 수용하고, 창이 사라졌으면 설계 실패
+    흐름대로 다시 던져야 한다(죽은 화면 오판 방지 정책 유지)."""
+
+    window = np.zeros((689, 2546, 3), dtype=np.uint8)
+
+    def test_wait_stable_accepts_static_screen(self):
+        judge = ScreenJudge(StalledCapture(self.window), (2544, 657))
+        self.assertIs(judge.wait_stable(), self.window)
+
+    def test_dead_window_still_raises(self):
+        from deckscan.win.capture import CaptureStalled
+        judge = ScreenJudge(StalledCapture(self.window, hwnd=0), (2544, 657))
+        with self.assertRaises(CaptureStalled):
+            judge.fresh()
 
 
 class WalkTest(unittest.TestCase):
@@ -137,6 +176,9 @@ class WalkTest(unittest.TestCase):
             self.assertEqual(store.battle_count(), 2)
             self.assertEqual(len(fi.wheels), 1)       # 스크롤 1회 → 불변 → 종착
             self.assertEqual(fi.clicks, [])           # 접힌 행 없음 — 클릭 불필요
+            # 스크롤 후 커서를 목록 밖에 파킹한다 — 호버가 패널을 확대 렌더로
+            # 바꿔 쓰레기 파싱을 만든다(2026-08-09 실기 결함 E, panel_4ffae5).
+            self.assertEqual(fi.moves, [ui.MOUSE_PARK])
             for b in store.iter_battles():
                 self.assertTrue(Path(b["capture_path"]).is_file())  # NFR-03
 
@@ -144,6 +186,47 @@ class WalkTest(unittest.TestCase):
                                     captures_dir=Path(tmp) / "cap")
             walker2.walk()
             self.assertEqual(store.battle_count(), 2)  # 멱등
+            store.close()
+
+    def test_top_boundary_row_skipped(self):
+        """목록 상단 경계 가드(TASK-12 결함 B): 아이콘이 목록 위 y인 행은
+        파싱하지 않는다. 스크롤은 아래로만 가므로 그 행은 이미 처리된 행이다."""
+        window = np.asarray(Image.open(
+            Path(__file__).resolve().parents[1] / "img" / "7.png").convert("RGB"))
+        rolled = np.roll(window, -30, axis=0)   # 1행 아이콘 127→97 < 목록 top
+        with tempfile.TemporaryDirectory() as tmp:
+            store = DataStore(":memory:")
+            parser = DeckParser(store, Path(tmp), evidence_dir=Path(tmp) / "ev")
+            judge = ScreenJudge(FakeCapture(rolled), (2544, 657))
+            run = store.create_run()
+            walker = lw.ListWalker(judge, FakeInput(), parser, store, run,
+                                   captures_dir=Path(tmp) / "cap")
+            s = walker.walk()
+            self.assertEqual(s.processed, 1)     # 경계 행 제외, 2행만
+            store.close()
+
+    def test_invalid_render_is_not_saved(self):
+        """무효 렌더(파서가 None 반환)는 저장하지 않고 재파싱도 반복하지 않는다."""
+        window = np.asarray(Image.open(
+            Path(__file__).resolve().parents[1] / "img" / "7.png").convert("RGB"))
+
+        class NoneParser:
+            calls = 0
+
+            def parse(self, frame, anchor):
+                type(self).calls += 1
+                return None
+
+        with tempfile.TemporaryDirectory() as tmp:
+            store = DataStore(":memory:")
+            judge = ScreenJudge(FakeCapture(window), (2544, 657))
+            run = store.create_run()
+            walker = lw.ListWalker(judge, FakeInput(), NoneParser(), store, run,
+                                   captures_dir=Path(tmp) / "cap")
+            s = walker.walk()
+            self.assertEqual(s.processed, 0)
+            self.assertEqual(store.battle_count(), 0)
+            self.assertEqual(NoneParser.calls, 2)   # 펼친 행 2개 × 1회(픽셀 서명 기억)
             store.close()
 
     def test_transient_panel_is_not_parsed(self):

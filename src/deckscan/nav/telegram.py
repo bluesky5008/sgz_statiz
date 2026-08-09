@@ -55,7 +55,7 @@ class TelegramNavigator:
             self._wait(target, what)
             return
         except NavigationTimeout:
-            frame = self.judge.capture.grab_fresh()
+            frame = self.judge.fresh()
             if self._at(frame, target):
                 self.judge.wait_stable()
                 return
@@ -67,7 +67,7 @@ class TelegramNavigator:
 
     def _step(self, cur: tuple[str, tuple], point: tuple[int, int],
               target: tuple[str, tuple], what: str) -> None:
-        frame = self.judge.capture.grab_fresh()
+        frame = self.judge.fresh()
         if not self._at(frame, cur):
             raise WrongScreen(f"{what} 이동 중단: 직전 화면 재검증 실패")
         self._click_wait(cur, point, target, what)

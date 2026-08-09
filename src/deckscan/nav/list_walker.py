@@ -148,6 +148,7 @@ class ListWalker:
                 return self.summary
             before = self._crop(frame, ui.LIST_REGION)
             self.input.wheel(*ui.SCROLL_POINT, -ui.SCROLL_NOTCHES)
+            self.input.move(*ui.MOUSE_PARK)   # 호버 확대 렌더 방지(결함 E)
             after_frame = self._fresh()
             after = self._crop(after_frame, ui.LIST_REGION)
             if same_image(before, after):
@@ -162,6 +163,8 @@ class ListWalker:
         for icon_y in detect_row_ys(frame):
             if self._done():
                 return False
+            if icon_y < ui.LIST_REGION[1]:
+                continue   # 상단 경계에 걸린 행 — 스크롤은 아래로만 가므로 이미 처리됨
             if row_expanded(frame, icon_y):
                 a = row_anchor(icon_y)
                 if a + _PANEL_H > frame.shape[0]:
@@ -179,6 +182,7 @@ class ListWalker:
                 continue
             self._expand_attempts[sig] = attempts + 1
             self.input.click(ui.ROW_CLICK_X, icon_y + ui.ROW_CLICK_DY)
+            self.input.move(*ui.MOUSE_PARK)   # 호버 확대 렌더 방지(결함 E)
             self.input.pause()
             return True
         return False
@@ -192,12 +196,17 @@ class ListWalker:
         # 이중 프레임 확증 — 전환·스크롤 연출 중의 일시 렌더를 파싱하면 필드
         # 오독으로 같은 전보가 다른 키로 중복 저장된다(2026-08-09 실기 실증:
         # 병력 9800→98 오독 중복). 다음 패스에서 재시도한다.
-        fresh = self._client(self.judge.capture.grab_fresh())
+        fresh = self._client(self.judge.fresh())
         if not same_image(panel, self._crop(fresh, ui.PANEL_REGION, dy)):
             log.info("패널 렌더 미안정 — 이번 패스 건너뜀 (anchor %d)", anchor_y)
             return
         self._seen_panels.add(sig)
         rec = self.parser.parse(frame, anchor_y)
+        if rec is None:
+            # 무효 렌더(확대 호버 등) — 저장하지 않는다. 같은 픽셀은 서명으로
+            # 재파싱을 막고, 정상 재렌더는 새 서명이라 다음 패스에서 파싱된다.
+            log.warning("무효 렌더 — 저장하지 않음 (anchor %d)", anchor_y)
+            return
         self.captures_dir.mkdir(parents=True, exist_ok=True)
         capture = self.captures_dir / f"{rec.battle_key}.png"
         Image.fromarray(np.ascontiguousarray(panel)).save(capture)
