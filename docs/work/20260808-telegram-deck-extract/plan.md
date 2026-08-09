@@ -11,8 +11,8 @@
 ## 요약
 
 - 목적: 승인된 기준선 v1을 작업 단위로 번역한 구현 계획.
-- 현재 결론 또는 상태: **TASK-01~11 완료**(기준선 v2 = DCR-001, 오프라인 테스트 51건 성공). 실기 scan 동작 실증(전체 순회·저장·멱등). TASK-12 진행 중 — cmd_0018 분석으로 결함 재분류(B~E: OCR 렌더 변형 오독 중복, 무효 확대 렌더, 정지 화면 오판, 경계 가드) 후 오프라인 수정 완료. 남은 것: 결함 A(묶음 행 펼침 클릭) 실측과 AC-01~06 실기 검증. 인장 3종·글리프(6·7 제외+변형 4종) 수확 완료.
-- 다음 행동: [work-log 재개 지점](./work-log.md#재개-지점) — 관리자 실행기 재기동 → 결함 A 실측 → 연속 2회 scan으로 AC-01~06 검증 기록 → TASK-13.
+- 현재 결론 또는 상태: **TASK-01~11·14 완료**(기준선 v3 = DCR-002, 오프라인 테스트 57건 성공). 실기 scan 동작 실증(전체 순회·저장·멱등). TASK-12 진행 중 — cmd_0018 분석으로 결함 재분류(B~E: OCR 렌더 변형 오독 중복, 무효 확대 렌더, 정지 화면 오판, 경계 가드) 후 오프라인 수정 완료. 남은 것: 결함 A(묶음 행 펼침 클릭) 실측과 AC-01~07 실기 검증. 인장 3종·글리프(6·7 제외+변형 4종) 수확 완료.
+- 다음 행동: [work-log 재개 지점](./work-log.md#재개-지점) — 관리자 실행기 재기동 → 결함 A 실측 → 연속 2회 scan으로 AC-01~07 검증 기록 → TASK-13.
 
 ## 문서 연결
 
@@ -26,9 +26,9 @@
 
 ## 기준선
 
-- 관련 요구사항: [요구사항 v2](./requirements.md) 전체 (2026-08-09, DCR-001)
-- 관련 설계: [설계 v2](./design.md) 전체 (2026-08-09, DCR-001)
-- 관련 ADR·DCR: [ADR-001](./decisions/ADR-001-storage-format.md), [ADR-002](./decisions/ADR-002-recognition-strategy.md), [DCR-001](./changes/DCR-001-list-traversal.md)(승인 2026-08-09 — 순회 전략·측면 매핑·A-02)
+- 관련 요구사항: [요구사항 v3](./requirements.md) 전체 (2026-08-09, DCR-002)
+- 관련 설계: [설계 v3](./design.md) 전체 (2026-08-09, DCR-002)
+- 관련 ADR·DCR: [ADR-001](./decisions/ADR-001-storage-format.md), [ADR-002](./decisions/ADR-002-recognition-strategy.md), [DCR-001](./changes/DCR-001-list-traversal.md)(승인 2026-08-09 — 순회 전략·측면 매핑·A-02), [DCR-002](./changes/DCR-002-client-selection.md)(승인 2026-08-09 — FR-08·AC-07 창 동적 탐지·선택 → TASK-14)
 
 ## 작업 정의
 
@@ -45,7 +45,7 @@
 모든 TASK는 작업 루트 직속이다(`상위: 없음`). 간선은 전부 `depends:`(순서 제약)다. `[실기]` = 게임 클라이언트 필요(2026-08-08 사용자 확인: 클라이언트 가동 중), `[TDD]` = 실패하는 선행 테스트로 시작(테스트 선행은 각 TASK의 검증 방법에 명시하며 별도 자식 노드로 분해하지 않는다).
 
 ```text
-[작업] 20260808-telegram-deck-extract — deckscan (기준선 v2) .... in-progress (구현 11/13, 검증 진행 중)
+[작업] 20260808-telegram-deck-extract — deckscan (기준선 v3) .... in-progress (구현 12/14, 검증 진행 중)
 ├─ [✓] 설계 단계 (4/4) — 요구사항 v1 · 설계 v1 · ADR-001/002
 │   └─ [✓★] 승인: 기준선 v1 (2026-08-08)
 ├─ [✓] 구현: TASK-01 프로젝트 뼈대
@@ -59,8 +59,9 @@
 ├─ [✓] 구현: TASK-09 TelegramNavigator [실기]  depends: 02, 03
 ├─ [✓] 구현: TASK-10 ListWalker·P-03 [실기]    depends: 08, 09   (기준선 v2 순회 — 묶음 행 펼침 클릭은 12에서 실측 보정)
 ├─ [✓] 구현: TASK-11 Controller·CLI [TDD]      depends: 04~10
-├─ [▶] 검증: TASK-12 실기 통합 검증 AC-01~06 [실기] depends: 03, 09~11   (오프라인 결함 수정 완료 — 결함 A 실측·AC 판정·검증 기록 남음)
-└─ [ ] 문서화: TASK-13 README·완료 보고        depends: 12
+├─ [▶] 검증: TASK-12 실기 통합 검증 AC-01~07 [실기] depends: 03, 09~11   (오프라인 결함 수정 완료 — 결함 A 실측·AC 판정·검증 기록 남음. AC-07 실기 확인 포함)
+├─ [✓] 구현: TASK-14 클라이언트 창 선택 FR-08 [TDD] depends: 11   (DCR-002 — 대화형 선택 실기는 AC-07로 12에 편입)
+└─ [ ] 문서화: TASK-13 README·완료 보고        depends: 12, 14
 ```
 
 ```mermaid
@@ -86,7 +87,8 @@ flowchart TD
     end
     subgraph G4["마무리"]
         T11["TASK-11 Controller·CLI"]:::done
-        T12["TASK-12 실기 통합 검증 AC-01~06"]:::active
+        T12["TASK-12 실기 통합 검증 AC-01~07"]:::active
+        T14["TASK-14 창 선택 FR-08 (DCR-002)"]:::done
         T13["TASK-13 README·완료 보고"]:::todo
     end
     APR -.-> T01
@@ -107,7 +109,9 @@ flowchart TD
     T10 -. depends .-> T11
     T03 -.-> T12
     T11 -.-> T12
+    T11 -.-> T14
     T12 -. depends .-> T13
+    T14 -.-> T13
     classDef done fill:#c8e6c9,stroke:#2e7d32
     classDef active fill:#fff9c4,stroke:#f9a825
     classDef todo fill:#eceff1,stroke:#90a4ae
@@ -231,12 +235,23 @@ flowchart TD
 - 검증 방법: [설계 §검증 전략](./design.md#검증-전략) 표대로 실행, 로그·DB 카운트·증거 캡처 기록
 - 완료 조건: AC-01~06 결과가 verification.md에 증거와 함께 기록
 
+### TASK-14: 클라이언트 창 동적 탐지·선택 (FR-08, DCR-002)
+
+- 상태: completed (2026-08-09 — TDD 6건 + 실기: 비대화형 다중 거부·`--hwnd` 경로 실증, Windows NUL isatty() 함정 수정(EOF=중단). 단일 후보 스모크는 상시 2클라이언트 환경이라 불가(단위로 갈음), 대화형 선택 실기는 AC-07로 TASK-12에 편입 — [work-log](./work-log.md#2026-08-09--dcr-002-승인기준선-v3-task-14-클라이언트-창-선택-tdd--부분-실기))
+- 상위: 없음
+- 목표: `scan`·`probe` 구동 시 창 후보 동적 탐지 — 다중이면 대화형 선택(번호 → 전면 표시 → y/n 확인), 단일이면 자동 진행, `--hwnd` 생략 경로, 비대화형 다중은 목록과 함께 거부(종료 1). `choose_window`는 입력 콜백 주입으로 단위 테스트 가능하게.
+- 관련 요구사항과 설계: FR-08, [DES-10 v3](./design.md#컴포넌트와-책임), [DCR-002](./changes/DCR-002-client-selection.md)
+- 변경 대상: `src/deckscan/controller.py`(choose_window), `src/deckscan/cli.py`(probe·scan 창 확정 경로 통합)
+- 의존성: TASK-11
+- 검증 방법(TDD): 선행 테스트 — 단일 후보 자동 반환, 다중 선택→전면 확인→확정, 확인 거부 시 재선택, `q` 중단, 잘못된 입력 재프롬프트. AC-07 실기 확인은 TASK-12에 편입(두 클라이언트 동시 가동 시)
+- 완료 조건: 단위 테스트 성공, CLI 동작(단일 후보 실기 스모크)
+
 ### TASK-13: 문서 정리 + 완료 보고
 
 - 상태: pending
 - 상위: 없음
-- 목표: README(설치·사용법·label 운영 절차), 자산 대장 최종화, completion.md, 추적성 갱신
-- 의존성: TASK-12
+- 목표: README(설치·사용법·label 운영 절차·창 선택 절차), 자산 대장 최종화, completion 기록, 추적성 갱신
+- 의존성: TASK-12, TASK-14
 - 완료 조건: [wf-implement 완료 조건](file:///C:/Users/hippo/.claude/skills/wf-implement/SKILL.md) 충족, 문서 자체 검토 통과
 
 ## 검증 계획

@@ -18,6 +18,33 @@ DEFAULT_DB = str(Path("output") / "deckscan.db")
 DEFAULT_EXPORT_DIR = str(Path("output") / "export")
 
 
+def _resolve_session(hwnd_arg: int | None) -> session.WindowSession | None:
+    """FR-08(DCR-002) 창 확정: --hwnd 생략 경로, 단일 자동, 다중 대화형 선택.
+
+    비대화형 실행(stdin이 콘솔 아님)에서 다중 후보면 프롬프트 대기 없이
+    후보 목록과 함께 거부한다 — 에이전트 실행기 보호.
+    """
+    if hwnd_arg is not None:
+        return session.WindowSession(hwnd_arg)
+    wins = session.find_client_windows()
+    if not wins:
+        print("대상 창 없음")
+        return None
+    if len(wins) > 1 and not sys.stdin.isatty():
+        for w in wins:
+            print(f"hwnd={w.hwnd:#x} pid={w.pid} rect={w.rect}")
+        print("같은 제목의 창이 여러 개입니다 — 비대화형 실행은 --hwnd로 지정하세요")
+        return None
+    from .controller import choose_window
+    from .win import win32
+    chosen = choose_window(wins, input, win32.raise_to_top)
+    if chosen is None:
+        print("창 선택 중단")
+        return None
+    print(f"대상 창: hwnd={chosen.hwnd:#x} pid={chosen.pid} rect={chosen.rect}")
+    return session.WindowSession(chosen.hwnd)
+
+
 def _snap(cap: WgcCapture, tag: str) -> Path:
     frame = cap.grab_fresh()
     PROBE_DIR.mkdir(parents=True, exist_ok=True)
@@ -29,20 +56,12 @@ def _snap(cap: WgcCapture, tag: str) -> Path:
 
 
 def cmd_probe(args: argparse.Namespace) -> int:
-    wins = session.find_client_windows()
-    for w in wins:
+    for w in session.find_client_windows():
         print(f"hwnd={w.hwnd:#x} pid={w.pid} elevated={w.elevated} "
               f"rect={w.rect} client={w.client} title='{w.title}'")
-    if not wins and args.hwnd is None:
-        print("대상 창 없음")
+    ws = _resolve_session(args.hwnd)
+    if ws is None:
         return 1
-    if args.hwnd is not None:
-        ws = session.WindowSession(args.hwnd)
-    else:
-        if len(wins) != 1:
-            print("--hwnd로 창을 지정하세요")
-            return 1
-        ws = session.WindowSession(wins[0].hwnd)
     if args.click:
         ws.check_permission()   # 입력은 UIPI 제약 — 스냅샷만이면 승격 불필요
     info = ws.info()
@@ -71,13 +90,8 @@ def cmd_scan(args: argparse.Namespace) -> int:
     from .store.datastore import DataStore
     from .vision.deck_parser import DeckParser
 
-    wins = session.find_client_windows()
-    if args.hwnd is not None:
-        ws = session.WindowSession(args.hwnd)
-    elif len(wins) == 1:
-        ws = session.WindowSession(wins[0].hwnd)
-    else:
-        print("대상 창을 찾지 못했거나 여러 개입니다 — --hwnd로 지정하세요")
+    ws = _resolve_session(args.hwnd)
+    if ws is None:
         return 1
     try:
         ws.check_permission()

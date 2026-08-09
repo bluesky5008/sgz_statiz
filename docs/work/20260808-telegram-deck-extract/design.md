@@ -3,7 +3,7 @@
 > 문서 유형: `design`
 > 작업 ID: `20260808-telegram-deck-extract`
 > 상태: `approved`
-> 기준선: `v2` (승인일 2026-08-09 — [DCR-001](./changes/DCR-001-list-traversal.md))
+> 기준선: `v3` (승인일 2026-08-09 — [DCR-002](./changes/DCR-002-client-selection.md))
 > 작성일: 2026-08-08
 > 최종 갱신: 2026-08-09
 > 관련 문서: [REQ-20260808-telegram-deck-extract: 요구사항](./requirements.md), [ADR-001: 저장 형식](./decisions/ADR-001-storage-format.md), [ADR-002: 인식 전략](./decisions/ADR-002-recognition-strategy.md)
@@ -77,7 +77,7 @@ CLI(scan|export|label|probe)
 - DES-07 **DigitGlyphReader**: [map_search DigitReader](file:///C:/src/git/map_search/src/mapscan/vision/digits.py) 이식. 이름 바 좌측 레벨 숫자(금색 폰트 0~9) 판독. 글리프는 구현 단계에서 수확 도구로 등록한다.
 - DES-08 **OcrReader**: winocr(Windows.Media.Ocr, ko) 어댑터. 병력 수, 전투 일시, 승·무·패 결과 판독과 신규 등록용 라벨 제안. P-01에서 숫자·날짜 정확성 실증. 엔진 교체는 이 어댑터 구현 교체로 한정한다. 결과 판독은 `승/무/패` 인장 영역의 템플릿 매칭을 우선 후보로 하되(3종 폐쇄 집합), 어느 쪽이든 이 컴포넌트가 캡슐화한다.
 - DES-09 **DataStore + CsvExport**: 아래 데이터 설계 참조. [map_search datastore.py](file:///C:/src/git/map_search/src/mapscan/store/datastore.py) 골격(WAL, 멱등 upsert, run 기록)과 [csv_export.py](file:///C:/src/git/map_search/src/mapscan/store/csv_export.py)(UTF-8 BOM) 이식.
-- DES-10 **Controller/CLI**: `scan`(추출 실행), `export`(CSV), `label`(pending 라벨 등록 대화), `probe`(창 탐색·스냅샷·마커 점수 진단). 실행 요약(FR-06)과 예외 경계(아래 실패 흐름) 담당.
+- DES-10 **Controller/CLI**: `scan`(추출 실행), `export`(CSV), `label`(pending 라벨 등록 대화), `probe`(창 탐색·스냅샷·마커 점수 진단). 실행 요약(FR-06)과 예외 경계(아래 실패 흐름) 담당. 창 확정(FR-08, [DCR-002](./changes/DCR-002-client-selection.md)): `scan`·`probe`는 후보를 동적 탐지해 다중이면 대화형 선택(`choose_window` — 번호 선택 → 전면 표시 → y/n 확인, 입력 콜백 주입으로 단위 테스트 가능), 단일이면 자동 진행, `--hwnd`는 생략 경로, 비대화형 다중은 목록과 함께 거부. 플랫폼 계층 `find_client_windows()` 재사용(session.py 무수정, DES-01 보존).
 
 ## 데이터와 인터페이스
 
@@ -142,7 +142,7 @@ deckscan probe  [--hwnd N]           # 창 나열, 스냅샷 저장, 마커 점�
 
 ### 정상 흐름
 
-1. 초기화: 창 탐색(제목 또는 `--hwnd`) → UIPI 권한 검사 → WGC 캡처 시작 → 클라이언트 크기 = 2544×657 검증 → run 생성.
+1. 초기화: 창 탐색·확정(FR-08 — 제목 탐지 후 다중이면 대화형 선택·전면 확인, 또는 `--hwnd`) → UIPI 권한 검사 → WGC 캡처 시작 → 클라이언트 크기 = 2544×657 검증 → run 생성.
 2. 내비게이션(FR-01): 메인 화면 마커 확인 → `더 보기` 클릭 → 메뉴 마커 대기 → `동맹` 클릭 → 동맹 화면 마커 → `전보` 클릭 → 동맹전보 마커 → `교전` 탭 클릭 → 탭 활성 마커. 각 클릭은 직전 화면 재검증(`_click_verified` 패턴) 후 전송.
 3. 순회(FR-02, FR-03): ListWalker 루프 — 행 재탐지 → 클릭 → 펼침 마커 + `wait_stable` → `grab_fresh` → DeckParser → `INSERT OR REPLACE` → 다음 행. 소진 시 스크롤, `_same_image`로 종착 판정.
 4. 종료(FR-06): run 마감(processed/saved/failed), 콘솔 요약. pending 신규 식별 수를 함께 보고하고 `label` 실행을 안내한다. 게임 화면 복귀는 하지 않는다(범위 밖).
@@ -151,7 +151,8 @@ deckscan probe  [--hwnd N]           # 창 나열, 스냅샷 저장, 마커 점�
 
 | 상황 | 감지 | 대응 |
 |---|---|---|
-| 창 없음·다중 창·권한 부족·해상도 불일치 | 초기화 검사 | 안내 후 종료 코드 1 (아무 조작 없음) |
+| 창 없음·권한 부족·해상도 불일치 | 초기화 검사 | 안내 후 종료 코드 1 (아무 조작 없음) |
+| 다중 창 (FR-08, [DCR-002](./changes/DCR-002-client-selection.md)) | 초기화 검사 | 대화형: 후보 목록 → 선택·전면 확인 후 진행. 비대화형: 후보 목록과 함께 종료 코드 1 |
 | 화면 전환 타임아웃 | 마커 미등장·`StabilizeTimeout` | 현재 프레임 증거 저장, run `aborted`, 종료 코드 2. 저장된 레코드는 유지 |
 | 클릭 무반응(행 펼침 실패) | 펼침 마커 미등장 | 1회 재시도 후 해당 행 건너뜀 + 증거 저장 (NFR-01) |
 | 필드 인식 실패 | 매칭 임계 미달·판독 실패 | `partial/failed` 저장 + 필드 크롭 증거, 계속 진행 (NFR-01) |
@@ -218,6 +219,7 @@ deckscan probe  [--hwnd N]           # 창 나열, 스냅샷 저장, 마커 점�
 | [FR-05](./requirements.md#기능-요구사항) | battle_key 설계 | [AC-03](./requirements.md#인수-조건) | 단위·실기 |
 | [FR-06](./requirements.md#기능-요구사항) | DES-10 | [AC-04](./requirements.md#인수-조건) | 실기 |
 | [FR-07](./requirements.md#기능-요구사항) | DES-06, DES-10(label) | [AC-06](./requirements.md#인수-조건) | 단위 |
+| [FR-08](./requirements.md#기능-요구사항) | DES-10(`choose_window`) | [AC-07](./requirements.md#인수-조건) | 단위·실기 |
 | [NFR-01](./requirements.md#비기능-요구사항) | 실패 흐름 표 | [AC-04](./requirements.md#인수-조건) | 단위·실기 |
 | [NFR-02](./requirements.md#비기능-요구사항) | DES-03 (`wait_stable`·마커) | [AC-01](./requirements.md#인수-조건) | 실기 |
 | [NFR-03](./requirements.md#비기능-요구사항) | capture_path·crop_path·evidence | [AC-02](./requirements.md#인수-조건) | 단위 |
@@ -238,6 +240,7 @@ deckscan probe  [--hwnd N]           # 창 나열, 스냅샷 저장, 마커 점�
 | 2026-08-08 | 자체 검토 후 승인 요청 상태로 전환 | 일관성 검토(§4.5) 통과 | draft → awaiting-approval | Claude(wf-design) |
 | 2026-08-08 | 기준선 v1 발행 | 사용자 승인 응답 | awaiting-approval → approved, v1 | 사용자 승인 / Claude 기록 |
 | 2026-08-09 | DES-04 순회 전략(펼침 판정·안전 클릭 지대), DES-05 측면 라벨 판정 — 기준선 v2 | [DCR-001](./changes/DCR-001-list-traversal.md) 승인 | approved, v2 | 사용자 승인 / Claude 기록 |
+| 2026-08-09 | DES-10 창 확정 절차(`choose_window`)·실패 흐름 다중 창 행 — 기준선 v3 | [DCR-002](./changes/DCR-002-client-selection.md) 승인 | approved, v3 | 사용자 승인 / Claude 기록 |
 
 ## 인계
 
