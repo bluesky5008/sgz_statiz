@@ -2,7 +2,7 @@
 
 > 문서 유형: `plan`
 > 작업 ID: `20260808-telegram-deck-extract`
-> 상태: `in-progress` (2026-08-08 사용자 구현 착수 승인)
+> 상태: `completed` (2026-08-09 — TASK-01~14 전체 완료, [완료 보고](./work-log.md#완료-보고-completion))
 > 기준선: `v1` (2026-08-08 승인)
 > 작성일: 2026-08-08
 > 최종 갱신: 2026-08-09
@@ -11,8 +11,8 @@
 ## 요약
 
 - 목적: 승인된 기준선 v1을 작업 단위로 번역한 구현 계획.
-- 현재 결론 또는 상태: **TASK-01~12·14 완료**(기준선 v5 = DCR-001~004, 오프라인 테스트 61건 성공). 실기 결함 A~F 전부 실측·수정, AC-01~06 성공·AC-07 부분([work-log 검증 결과](./work-log.md#검증-결과-verification)). 잔여: TASK-13(README·완료 보고).
-- 다음 행동: TASK-13 → 완료 보고.
+- 현재 결론 또는 상태: **완료 — TASK-01~14 전체**(기준선 v5 = DCR-001~004, 오프라인 테스트 61건 성공). 실기 결함 A~F 전부 실측·수정, AC-01~06 성공·AC-07 부분([work-log 검증 결과](./work-log.md#검증-결과-verification)). [완료 보고](./work-log.md#완료-보고-completion).
+- 다음 행동: 없음 — 후속은 포트폴리오 작업 2(통계 분석·시각화).
 
 ## 문서 연결
 
@@ -45,7 +45,7 @@
 모든 TASK는 작업 루트 직속이다(`상위: 없음`). 간선은 전부 `depends:`(순서 제약)다. `[실기]` = 게임 클라이언트 필요(2026-08-08 사용자 확인: 클라이언트 가동 중), `[TDD]` = 실패하는 선행 테스트로 시작(테스트 선행은 각 TASK의 검증 방법에 명시하며 별도 자식 노드로 분해하지 않는다).
 
 ```text
-[작업] 20260808-telegram-deck-extract — deckscan (기준선 v5) .... in-progress (구현·검증 13/14 — TASK-13 문서화만 잔여)
+[작업] 20260808-telegram-deck-extract — deckscan (기준선 v5) .... completed (TASK-01~14 전체 완료, 2026-08-09)
 ├─ [✓] 설계 단계 (4/4) — 요구사항 v1 · 설계 v1 · ADR-001/002
 │   └─ [✓★] 승인: 기준선 v1 (2026-08-08)
 ├─ [✓] 구현: TASK-01 프로젝트 뼈대
@@ -61,7 +61,7 @@
 ├─ [✓] 구현: TASK-11 Controller·CLI [TDD]      depends: 04~10
 ├─ [✓] 검증: TASK-12 실기 통합 검증 AC-01~07 [실기] depends: 03, 09~11   (AC-01~06 성공·AC-07 부분 — 대화형 UX 사용자 확인 잔여)
 ├─ [✓] 구현: TASK-14 클라이언트 창 선택 FR-08 [TDD] depends: 11   (DCR-002 — 대화형 선택 실기는 AC-07로 12에 편입)
-└─ [ ] 문서화: TASK-13 README·완료 보고        depends: 12, 14
+└─ [✓] 문서화: TASK-13 README·완료 보고        depends: 12, 14
 ```
 
 ```mermaid
@@ -89,7 +89,7 @@ flowchart TD
         T11["TASK-11 Controller·CLI"]:::done
         T12["TASK-12 실기 통합 검증 AC-01~07"]:::done
         T14["TASK-14 창 선택 FR-08 (DCR-002)"]:::done
-        T13["TASK-13 README·완료 보고"]:::todo
+        T13["TASK-13 README·완료 보고"]:::done
     end
     APR -.-> T01
     T01 -. depends .-> T02
@@ -248,7 +248,7 @@ flowchart TD
 
 ### TASK-13: 문서 정리 + 완료 보고
 
-- 상태: pending
+- 상태: completed (2026-08-09 — README 최종화(scan 사용법·창 선택·완전 덱 정책·알려진 한계), 자산 대장 보완(side 라벨 2종·레지스트리 정책), [완료 보고](./work-log.md#완료-보고-completion)·검증 기록·추적성 갱신)
 - 상위: 없음
 - 목표: README(설치·사용법·label 운영 절차·창 선택 절차), 자산 대장 최종화, completion 기록, 추적성 갱신
 - 의존성: TASK-12, TASK-14

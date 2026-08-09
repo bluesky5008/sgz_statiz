@@ -10,8 +10,8 @@
 ## 요약
 
 - 목적: sgz_statiz 프로젝트의 작업들을 하나의 목표(동맹전보 교전 통계 정리) 아래 묶어 계획·추적한다.
-- 현재 결론 또는 상태: 범위 승인 완료(2026-08-09). 작업 1(deckscan) 진행 중, 작업 2(통계 분석) 후보 등재.
-- 다음 행동: 작업 1 계속 — [재개 지점](../20260808-telegram-deck-extract/work-log.md#재개-지점)(TASK-03, 관리자 실행기 대기).
+- 현재 결론 또는 상태: **작업 1(deckscan) 완료**(2026-08-09, 기준선 v5, [완료 보고](../20260808-telegram-deck-extract/work-log.md#완료-보고-completion)). 작업 2(통계 분석) 후보 등재 상태.
+- 다음 행동: 작업 2 착수 결정 시 wf-design부터 정식 경로.
 
 ## 문서 연결
 
@@ -30,7 +30,7 @@
 
 | 작업 ID | 제목 | 상태 | 의존 |
 |---|---|---|---|
-| [20260808-telegram-deck-extract](../20260808-telegram-deck-extract/plan.md) | deckscan — 동맹전보 교전 덱 추출 도구 | in-progress | — |
+| [20260808-telegram-deck-extract](../20260808-telegram-deck-extract/plan.md) | deckscan — 동맹전보 교전 덱 추출 도구 | completed (2026-08-09) | — |
 | (미발행 — 후보) | 교전 통계 분석·시각화 | pending (미착수, wf-design 미진행) | depends: 20260808-telegram-deck-extract |
 
 - 후보 작업은 포트폴리오 등재일 뿐 승인된 작업이 아니다. 착수 시 wf-design부터 정식 경로를 따르며 그때 작업 ID를 발행한다.
@@ -40,10 +40,10 @@
 <!-- generated — wf-tree 렌더링 생성물. 수정은 위 작업 목록에서 하고 재생성한다. -->
 
 ```text
-[포트폴리오] PF-sgz-statiz — 동맹전보 교전 통계 정리 .... in-progress (1/2 진행 중)
+[포트폴리오] PF-sgz-statiz — 동맹전보 교전 통계 정리 .... in-progress (1/2 완료)
 ├─ [✓★] 승인: 포트폴리오 범위 ........................... approved 2026-08-09
-├─ [▶] 작업: 20260808-telegram-deck-extract deckscan .... in-progress (구현 7/13 + 부분 2, ⚠ blocked 1)
-│      └─ 상세: plan.md 계획 트리 참조 (TASK-01~13)
+├─ [✓] 작업: 20260808-telegram-deck-extract deckscan .... completed 2026-08-09 (TASK-01~14, 기준선 v5)
+│      └─ 상세: plan.md 계획 트리 참조 (TASK-01~14)
 └─ [ ] 작업: (후보) 교전 통계 분석·시각화 ............... pending   depends: deck-extract
 ```
 
@@ -56,7 +56,7 @@
 
 ## 인계
 
-- 다음 단계 또는 워크플로우: 작업 1은 [wf-implement 재개 지점](../20260808-telegram-deck-extract/work-log.md#재개-지점) 계속(TASK-03, 관리자 실행기 대기), 작업 2는 착수 결정 시 wf-design부터
+- 다음 단계 또는 워크플로우: 작업 1 완료([완료 보고](../20260808-telegram-deck-extract/work-log.md#완료-보고-completion)). 작업 2는 착수 결정 시 wf-design부터
 - 차단 요인: 없음
 
 ## 변경 이력
@@ -65,3 +65,4 @@
 |---|---|---|---|---|
 | 2026-08-09 | 최초 생성 (작업 1 등재, 작업 2 후보) | 사용자 생성 요청 | draft → awaiting-approval | Claude(wf-tree) |
 | 2026-08-09 | 범위 승인 반영 | 사용자 승인 응답 | awaiting-approval → in-progress | 사용자 승인 / Claude 기록 |
+| 2026-08-09 | 작업 1 완료 반영(TASK-01~14, 기준선 v5) | [완료 보고](../20260808-telegram-deck-extract/work-log.md#완료-보고-completion) | in-progress (1/2 완료) | Claude(wf-implement 완료 기록) |
