@@ -3,7 +3,7 @@
 > 문서 유형: `design`
 > 작업 ID: `20260808-telegram-deck-extract`
 > 상태: `approved`
-> 기준선: `v3` (승인일 2026-08-09 — [DCR-002](./changes/DCR-002-client-selection.md))
+> 기준선: `v4` (승인일 2026-08-09 — [DCR-003](./changes/DCR-003-battle-key.md))
 > 작성일: 2026-08-08
 > 최종 갱신: 2026-08-09
 > 관련 문서: [REQ-20260808-telegram-deck-extract: 요구사항](./requirements.md), [ADR-001: 저장 형식](./decisions/ADR-001-storage-format.md), [ADR-002: 인식 전략](./decisions/ADR-002-recognition-strategy.md)
@@ -116,12 +116,12 @@ deck_slots(battle_key TEXT REFERENCES battles,
      PRIMARY KEY (battle_key, side, slot));
 ```
 
-- `battle_key = sha1(battle_time | attacker_id | defender_id | 정렬된 슬롯 튜플)`. 식별 ID가 영속 레지스트리에서 오므로 재실행에도 같은 키가 재현되어 `INSERT OR REPLACE`로 멱등이다(FR-05, AC-03). 일시·유저·덱이 완전히 동일한 두 전보는 1건으로 합쳐진다(알려진 한계, 위험 참조).
+- `battle_key = sha1(battle_time | attacker_id | defender_id | 정렬된 (side, slot, general_id))` (v4, [DCR-003](./changes/DCR-003-battle-key.md)). 키 재료는 결정적 요소만 쓴다 — 병력·레벨은 OCR 판독이라 실행 컨텍스트에 따라 값이 흔들려(2026-08-09 실기 실증) 키에 넣으면 같은 전보가 다른 키로 갈라진다. 병력·레벨 값 자체는 슬롯 레코드에 그대로 저장한다. 식별 ID가 영속 레지스트리에서 오므로 재실행에도 같은 키가 재현되어 `INSERT OR REPLACE`로 멱등이다(FR-05, AC-03). 같은 초·같은 유저쌍·같은 장수 구성의 다중 전투는 1건으로 합쳐진다(알려진 한계 — 실기 638건 표본에서 랠리는 장수 구성이 달라 전부 구분됨).
 - 파싱 실패로 키 재료가 비면 패널 크롭의 픽셀 해시로 대체 키를 만들어 `failed` 레코드도 멱등 저장한다.
 
 ### CSV 내보내기 계약
 
-`export` 명령이 `output/export/`에 UTF-8 BOM CSV 2종을 생성한다: `battles_<날짜>.csv`(전보 1행), `deck_long_<날짜>.csv`(장수 1행 — battle_key, 일시, 결과, 공격·수비 유저 라벨, side, slot, 장수 라벨, 레벨, 병력; 피벗 집계용 long 형식).
+`export` 명령이 `output/export/`에 UTF-8 BOM CSV 3종을 생성한다: `battles_<날짜>.csv`(전보 1행), `deck_long_<날짜>.csv`(장수 1행 — battle_key, 일시, 결과, 공격·수비 유저 라벨, side, slot, 장수 라벨, 레벨, 병력; 피벗 집계용 long 형식), `generals_<날짜>.csv`(장수별 최신 전투 기준 레벨 — v4, [DCR-003](./changes/DCR-003-battle-key.md)).
 
 ### CLI 계약
 
@@ -241,6 +241,7 @@ deckscan probe  [--hwnd N]           # 창 나열, 스냅샷 저장, 마커 점�
 | 2026-08-08 | 기준선 v1 발행 | 사용자 승인 응답 | awaiting-approval → approved, v1 | 사용자 승인 / Claude 기록 |
 | 2026-08-09 | DES-04 순회 전략(펼침 판정·안전 클릭 지대), DES-05 측면 라벨 판정 — 기준선 v2 | [DCR-001](./changes/DCR-001-list-traversal.md) 승인 | approved, v2 | 사용자 승인 / Claude 기록 |
 | 2026-08-09 | DES-10 창 확정 절차(`choose_window`)·실패 흐름 다중 창 행 — 기준선 v3 | [DCR-002](./changes/DCR-002-client-selection.md) 승인 | approved, v3 | 사용자 승인 / Claude 기록 |
+| 2026-08-09 | battle_key 재료를 결정적 요소로 한정(병력·레벨 제외), CSV 3종(generals 최신 레벨), 한계 갱신 — 기준선 v4 | [DCR-003](./changes/DCR-003-battle-key.md) 승인 | approved, v4 | 사용자 승인 / Claude 기록 |
 
 ## 인계
 

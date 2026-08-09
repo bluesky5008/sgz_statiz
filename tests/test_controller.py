@@ -52,9 +52,10 @@ class CsvExportTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             paths = export_csv(store, tmp)
             names = sorted(p.name for p in paths)
-            self.assertEqual(len(paths), 2)
+            self.assertEqual(len(paths), 3)
             self.assertTrue(names[0].startswith("battles_"), names)
             self.assertTrue(names[1].startswith("deck_long_"), names)
+            self.assertTrue(names[2].startswith("generals_"), names)  # DCR-003
             for p in paths:
                 self.assertEqual(p.read_bytes()[:3], b"\xef\xbb\xbf", p)  # BOM
             battles = paths[0].read_text(encoding="utf-8-sig").splitlines()

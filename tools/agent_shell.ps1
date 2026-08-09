@@ -15,11 +15,15 @@ $seq = 1
 $last = Get-Date
 while (((Get-Date) - $last).TotalMinutes -lt $IdleQuitMin) {
     $cf = Join-Path $Dir ("cmd_{0:D4}.txt" -f $seq)
+    $done = Join-Path $Dir ("done_{0:D4}.txt" -f $seq)
+    # Skip commands already executed in a prior session - a restart must not
+    # replay stale cmd files (2026-08-09 incident: replayed probe hung on an
+    # interactive prompt reading the launcher console).
+    if (Test-Path $done) { $seq += 1; continue }
     if (-not (Test-Path $cf)) { Start-Sleep -Milliseconds 300; continue }
     Start-Sleep -Milliseconds 200
     $last = Get-Date
     $res = Join-Path $Dir ("res_{0:D4}.log" -f $seq)
-    $done = Join-Path $Dir ("done_{0:D4}.txt" -f $seq)
     $body = Get-Content $cf -Raw -Encoding utf8
     "run #$seq $(Get-Date -Format o)" | Out-File "$Dir\shell_status.txt" -Encoding utf8 -Append
     if ($body.Trim() -eq 'quit') { 'quit' | Out-File $done -Encoding utf8; break }

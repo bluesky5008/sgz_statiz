@@ -108,10 +108,16 @@ class BattleRecord:
 
 def make_battle_key(battle_time: str | None, attacker_id: int | None,
                     defender_id: int | None, slots: list[SlotRecord]) -> str:
-    """정규화 내용 해시 — 동일 전보는 재실행에도 같은 키가 재현된다."""
+    """정규화 내용 해시 — 동일 전보는 재실행에도 같은 키가 재현된다.
+
+    결정적 요소(일시·유저 ID·장수 구성)만 사용한다(DCR-003). 병력·레벨은
+    OCR 판독이라 실행 컨텍스트에 따라 값이 흔들려(2026-08-09 run2 실증:
+    같은 캡처가 10000/10/10011로 판독) 키에 넣으면 같은 전보가 다른 키로
+    갈라져 중복 저장된다(FR-05 위반). 값 자체는 레코드에 그대로 저장된다.
+    """
     parts = [battle_time or "", str(attacker_id or ""), str(defender_id or "")]
     for s in sorted(slots, key=lambda s: (s.side, s.slot)):
-        parts.append(f"{s.side},{s.slot},{s.general_id or ''},{s.level or ''},{s.troops or ''}")
+        parts.append(f"{s.side},{s.slot},{s.general_id or ''}")
     return hashlib.sha1("|".join(parts).encode("utf-8")).hexdigest()
 
 
@@ -239,6 +245,19 @@ class DataStore:
             LEFT JOIN identities da ON da.identity_id = b.defender_alliance_id
             LEFT JOIN identities g  ON g.identity_id  = s.general_id
             ORDER BY b.battle_time, b.battle_key, s.side, s.slot""")
+
+    def general_latest_levels(self):
+        """장수별 최신 전투 기준 레벨 (DCR-003 — 레벨은 키가 아니라 속성)."""
+        yield from self._conn.execute("""
+            SELECT s.general_id, g.label AS general, s.level,
+                   MAX(b.battle_time) AS last_battle_time
+            FROM deck_slots s
+            JOIN battles b ON b.battle_key = s.battle_key
+            LEFT JOIN identities g ON g.identity_id = s.general_id
+            WHERE s.level IS NOT NULL AND b.battle_time IS NOT NULL
+              AND s.general_id IS NOT NULL
+            GROUP BY s.general_id
+            ORDER BY s.general_id""")
 
     def battle_rows(self):
         """내보내기용 전보 1행 (라벨 조인)."""

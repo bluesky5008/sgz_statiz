@@ -48,11 +48,24 @@ class BattleKeyTest(unittest.TestCase):
         b = make_battle_key("2026-08-08T22:58:47", 1, 2, _slots())
         self.assertEqual(a, b)
 
-    def test_content_sensitive(self):
+    def test_content_sensitive_to_generals(self):
         base = make_battle_key("2026-08-08T22:58:47", 1, 2, _slots())
         changed = _slots()
-        changed[0].troops = 9999
+        changed[0].general_id = 99
         self.assertNotEqual(base, make_battle_key("2026-08-08T22:58:47", 1, 2, changed))
+
+    def test_key_ignores_troops_and_level_variance(self):
+        """DCR-003: 병력·레벨은 OCR 판독이라 실행 컨텍스트에 따라 값이 흔들려
+        (2026-08-09 run2 실증: 같은 캡처가 10000/10/10011) 키에 넣으면 같은
+        전보가 다른 키로 중복 저장된다. 키는 결정적 요소(일시·유저·장수
+        구성)만 사용한다."""
+        base = make_battle_key("2026-08-08T22:58:47", 1, 2, _slots())
+        varied = _slots()
+        varied[0].troops = 10
+        varied[1].troops = None
+        varied[2].level = None
+        varied[3].level = 48
+        self.assertEqual(base, make_battle_key("2026-08-08T22:58:47", 1, 2, varied))
 
     def test_slot_order_insensitive(self):
         slots = _slots()
@@ -70,6 +83,23 @@ class DataStoreTest(unittest.TestCase):
 
     def tearDown(self):
         self.store.close()
+
+    def test_general_latest_levels(self):
+        """DCR-003: 장수별 최신 전투 기준 레벨 조회 (레벨 성장 반영)."""
+        run = self.store.create_run()
+        gid = self.store.create_identity("general", "가후", "t.png")
+        old = BattleRecord("k-old", "2026-08-08T10:00:00", "승", 1, 2, None,
+                           None, None, "ok",
+                           [SlotRecord("attack", 1, gid, 49, 9000)])
+        new = BattleRecord("k-new", "2026-08-09T10:00:00", "승", 1, 2, None,
+                           None, None, "ok",
+                           [SlotRecord("attack", 1, gid, 50, 9100)])
+        self.store.upsert_battle(run, old)
+        self.store.upsert_battle(run, new)
+        rows = list(self.store.general_latest_levels())
+        self.assertEqual([(r["general_id"], r["general"], r["level"],
+                           r["last_battle_time"]) for r in rows],
+                         [(gid, "가후", 50, "2026-08-09T10:00:00")])
 
     def test_upsert_idempotent(self):
         run = self.store.create_run()

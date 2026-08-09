@@ -30,7 +30,7 @@
 - 진행 중인 작업: TASK-12 (실기 통합 검증 — 오프라인 수정 완료, 결함 A 실측·AC-01~07 판정 남음)
 - 마지막 완료 작업: DCR-002 승인·기준선 v3, TASK-14 구현(2026-08-09, 테스트 57건)
 - 작업 트리 상태: 구현 12/14 완료 — [plan.md](./plan.md#계획-트리)
-- 차단 요인: **관리자 실행기 종료됨**(pid 30648, 유휴 300분 초과 — 사용자가 tools\agent_shell_admin.bat 관리자 실행 필요). 다음 명령 순번: cmd_0019. **실기 대상 창: `--hwnd 0x508b4`(羊커리, pid 13608 — 0x60140 컬러단장용스는 사용 금지)**. hwnd는 클라이언트 재시작 시 변하므로 매 세션 probe로 재확인.
+- 차단 요인: 없음 — 관리자 실행기 재기동됨(2026-08-09 16:20, pid 26464, elevated=True). **재기동 시 옛 cmd 재실행 결함 발견**: 스크립트가 seq=1부터 기존 cmd 파일을 재실행 → cmd_0001(probe)이 다중 클라이언트 선택 프롬프트에서 콘솔 입력 대기로 걸림(사용자 q 입력으로 해소, 옛 프로토콜 파일 68개는 archive_s1/로 보관). agent_shell.ps1에 done 마커 스킵 수정(다음 재기동부터 적용). **다음 명령 순번: cmd_0002**. **실기 대상 창: `--hwnd 0x508b4`(羊커리, pid 13608 — 0x60140 컬러단장용스는 사용 금지). 실행기 경유 deckscan 명령은 반드시 --hwnd 지정**(실행기 콘솔은 진짜 TTY라 선택 프롬프트가 실행기를 블록함). hwnd는 클라이언트 재시작 시 변하므로 매 세션 probe로 재확인.
 
 ## 수행 기록
 
@@ -202,6 +202,20 @@
 - 결과: **전체 테스트 57건 성공**(51 + choose_window 6).
 - 변경 파일: src/deckscan/controller.py(choose_window), src/deckscan/cli.py(_resolve_session·probe·scan), tests/test_controller.py(신규 6건), docs(REQ v3·DESIGN v3·plan·DCR-002)
 
+### 2026-08-09 — TASK-12 실기 검증 1: 결함 A 해소, 결함 F 발견·수정, run1 성공 (실기 + TDD)
+
+- **결함 A 실측 해소**(cmd_0004~0005): 우측 화살표 열(x=1771) 클릭은 무효, **빈 구간 x=990·1336(dy=7)은 즉시 펼침**. ROW_CLICK_X=990 채택(위치 링크·유저명·동맹명 최원거리). **묶음 펼침은 아코디언**(다른 묶음을 펼치면 이전 묶음 재접힘 — [7회]↔[6회] 실측) → walker에 **클릭-파싱 완료 추적**(`_done_rows`·`_pending_expand`) 추가로 재클릭·skip 오집계 방지. 재접힘 헤더 픽셀 완전 동일(채널차 0) 실측 → 실기 캡처 3장을 img/accordion_s0~2.png 픽스처로 영구화, TDD Red→Green.
+- **호버 확대 가설 기각**(cmd_0006~0007): 패널 중앙·우측 가장자리·헤더·카드 4지점 호버 변화율 0.3~0.5%(배경 노이즈 수준). 확대 렌더는 원인 미상 일과성(신규 전보 유입 애니메이션 추정)으로 재분류 — 무효 렌더 게이트가 방어(run2에서 실전 차단 확인). MOUSE_PARK(400,350) 무해 확인.
+- **scan run1**(cmd_0008, DB 리셋 후): **exit 0, 처리 37·저장 37·실패 0, 고유 16(ok 15·partial 1), 중복 0** — 결함 C(정지 화면)·D(OCR 오독 중복) 수정 실전 실증. 메인 복귀 스크립트는 menu 마커 병존(더 보기 메뉴 열림)으로 판정 실패했으나 goto_combat_tab의 메뉴 분기가 처리(복귀 판정 조건 완화로 해소).
+- **결함 F 발견·수정**: 열람된 단건 행 클릭은 인라인 펼침이 아니라 **전투 상세 화면으로 전환**(img/detail.png) — walker가 이탈을 감지하지 못해 정지 화면을 종착으로 오인, run1이 목록 미완주 상태로 "done" 종료. 수정: 목록 화면 마커(MARKER_TELEGRAM, 탭 무관) 가드 + 귀환(CLICK_RETURN 2499,24) 복구 + 원인 행 상세형 skip. TDD(DetailCapture 픽스처) Red→Green, run2에서 실전 복구 작동 확인.
+
+### 2026-08-09 — TASK-12 실기 검증 2: run2 전체 이력 순회, OCR 비결정성 실증 → DCR-003 (기준선 v4)
+
+- **run2**(cmd_0009): 교전 탭은 동맹 전체의 장기 이력(600건+ 전보, 유저 식별자 260+)을 담고 있어 전체 순회가 장시간 소요(Q-01 결정대로의 동작). 관찰: 같은 초·같은 유저쌍 다중 레코드는 대부분 실제 다부대 랠리(장수 구성 상이, 최대 8건) — 정상. 무효 렌더 게이트·상세형 복구 실전 작동 다수 확인. 순회 미완 상태에서 사용자 결정으로 강제 종료(이하 DCR-003으로 데이터 무효화 예정이라 손실 없음).
+- **진성 중복 1쌍 실증 → OCR 비결정성 확정**: 동일 장수 구성 레코드가 attack2 병력 `10` vs `10011`로 갈라짐. 저장 캡처를 오프라인 판독 시 **둘 다 10000 정독**(5회 반복 동일) — Windows OCR이 실행 컨텍스트에 따라 다른 값을 냄. 키가 OCR 숫자에 의존하는 한 중복은 구조적 → wf-design 반환.
+- **[DCR-003](./changes/DCR-003-battle-key.md) 승인(기준선 v4)**: 키 재료를 결정적 요소(일시·유저쌍·장수 구성)로 한정, 병력·레벨은 레코드 값 유지 + **장수별 최신 전투 기준 레벨 조회**(`general_latest_levels`·`generals_<날짜>.csv`) 추가(사용자 요청). 구현 TDD Red→Green: 키 불변성(병력·레벨 변동)·장수 구성 민감성·최신 레벨·CSV 3종 계약. **전체 테스트 61건 성공.**
+- 변경 파일: src/deckscan/nav/ui_telegram.py(ROW_CLICK_X·CLICK_RETURN), src/deckscan/nav/list_walker.py(아코디언 추적·목록 이탈 가드·귀환 복구), src/deckscan/store/datastore.py(make_battle_key v4·general_latest_levels), src/deckscan/store/csv_export.py(generals), tests 4개 파일, img/accordion_s0~2.png·detail.png(신규 픽스처), docs(DESIGN v4·REQ v4·DCR-003)
+
 ## 설계와 달라진 점
 
 - 경미한 변경(이유 기록, 기준선 의미 불변) 3건 — 2026-08-09 TASK-12:
@@ -224,11 +238,11 @@
   3. DB 초기화(output/deckscan.db·captures·evidence 삭제) → **연속 2회 scan**(각 scan 전 메인 복귀는 대화형으로 확인 — cmd_0018 run#1처럼 blind 귀환 클릭은 취약) → AC-01·03·04 판정 → 검증 결과를 이 문서에 verification 유형으로 기록(VER-01~06, 증거: res 로그·DB 카운트·captures).
   4. TASK-13: README 최종화·completion 기록·추적성 갱신.
 - 먼저 확인할 사항: 이 문서의 2026-08-09 결함 재분류 절(결함 B~E 수정 완료 — 실기에서 재발 여부 관찰), [plan.md](./plan.md), [DCR-001](./changes/DCR-001-list-traversal.md)
-- 환경: 관리자 실행기 종료됨 — 사용자가 tools\agent_shell_admin.bat 관리자 실행 후 shell_status.txt `elevated=True` 확인. 다음 명령 순번 cmd_0019. 게임 클라이언트 상시 사용 허가(2026-08-09 사용자, 羊커리 클라이언트만).
+- 환경: 관리자 실행기 가동 중(pid 26464). 다음 명령 순번 cmd_0002(재기동으로 순번 리셋). 게임 클라이언트 상시 사용 허가(2026-08-09 사용자, 테스트는 羊커리 클라이언트만 — `--hwnd 0x508b4`, 실행기 경유 명령은 --hwnd 필수).
 - 필요한 명령 또는 파일:
 
 ```powershell
-.\.venv\Scripts\python.exe -m unittest discover -s tests   # 51건 green 기대
-# 실행기 프로토콜: output\agent_shell\cmd_0019.txt 작성 → res_0019.log/done_0019.txt 대기
+.\.venv\Scripts\python.exe -m unittest discover -s tests   # 57건 green 기대
+# 실행기 프로토콜: output\agent_shell\cmd_0002.txt 작성 → res_0002.log/done_0002.txt 대기
 # scan 시작 전제: 메인 화면(귀환 클릭 = 클라이언트 (2499,24), 도달은 스냅샷으로 확인)
 ```

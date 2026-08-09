@@ -19,7 +19,7 @@ import numpy as np
 from PIL import Image
 
 from . import ui_telegram as ui
-from .navigator import ScreenJudge, same_image
+from .navigator import ScreenJudge, WrongScreen, same_image
 
 log = logging.getLogger(__name__)
 
@@ -115,6 +115,11 @@ class ListWalker:
         self._seen_panels: set[str] = set()
         self._expand_attempts: dict[str, int] = {}
         self._skipped: set[str] = set()
+        # 묶음 펼침은 아코디언(2026-08-09 실기) — 새 묶음을 펼치면 이전 묶음이
+        # 재접힘된다. 파싱을 마친 묶음의 재접힘 헤더 서명을 기억해 재클릭을
+        # 막는다(재접힘 헤더는 픽셀 동일 실측 — img/accordion_s0·s2).
+        self._done_rows: set[str] = set()
+        self._pending_expand: str | None = None
 
     # -- 프레임 도우미 -------------------------------------------------------
 
@@ -123,8 +128,32 @@ class ListWalker:
         cw, ch = self.judge.client_size
         return window_frame[oy:oy + ch, ox:ox + cw]
 
-    def _fresh(self) -> np.ndarray:
-        return self._client(self.judge.wait_stable())
+    def _at_list(self, window: np.ndarray) -> bool:
+        """전보 목록 화면 판정 — 화면 제목 마커(탭 무관)."""
+        name, rect = ui.MARKER_TELEGRAM
+        return self.judge.marker_score(window, rect, ui_template(name)) \
+            >= ui.MARKER_NCC_THRESHOLD
+
+    def _recover(self) -> None:
+        """목록 화면 이탈 복구(결함 F — 2026-08-09 실기).
+
+        열람된 단건 행 클릭은 인라인 펼침이 아니라 전투 상세 화면으로 전환된다.
+        귀환으로 복귀하고 원인 행은 상세형으로 건너뜀 처리한다(재클릭 무의미).
+        """
+        if self._pending_expand is not None:
+            self._skipped.add(self._pending_expand)
+            self.summary.skipped += 1
+            log.warning("행 클릭이 화면 전환 유발(상세형) — 건너뜀: %s",
+                        self._pending_expand[:12])
+            self._pending_expand = None
+        for _ in range(2):
+            self.input.click(*ui.CLICK_RETURN)
+            self.input.move(*ui.MOUSE_PARK)
+            self.input.pause()
+            if self._at_list(self.judge.wait_stable()):
+                log.info("전보 목록 복귀")
+                return
+        raise WrongScreen("전보 목록 이탈 — 귀환 복구 실패")
 
     @staticmethod
     def _crop(frame: np.ndarray, box, dy: int = 0) -> np.ndarray:
@@ -139,7 +168,11 @@ class ListWalker:
 
     def walk(self) -> WalkSummary:
         while True:
-            frame = self._fresh()
+            window = self.judge.wait_stable()
+            if not self._at_list(window):
+                self._recover()
+                continue
+            frame = self._client(window)
             if self._pass(frame):
                 continue                      # 화면이 변형됨 — 재탐지부터
             if self._done():
@@ -149,8 +182,11 @@ class ListWalker:
             before = self._crop(frame, ui.LIST_REGION)
             self.input.wheel(*ui.SCROLL_POINT, -ui.SCROLL_NOTCHES)
             self.input.move(*ui.MOUSE_PARK)   # 호버 확대 렌더 방지(결함 E)
-            after_frame = self._fresh()
-            after = self._crop(after_frame, ui.LIST_REGION)
+            after_window = self.judge.wait_stable()
+            if not self._at_list(after_window):
+                self._recover()
+                continue
+            after = self._crop(self._client(after_window), ui.LIST_REGION)
             if same_image(before, after):
                 return self.summary           # 종착 — 더 이상 스크롤되지 않음
 
@@ -172,7 +208,7 @@ class ListWalker:
                 self._parse_row(frame, a)
                 continue
             sig = self._row_sig(frame, icon_y)
-            if sig in self._skipped:
+            if sig in self._skipped or sig in self._done_rows:
                 continue
             attempts = self._expand_attempts.get(sig, 0)
             if attempts >= 2:                 # 1회 재시도까지 실패 — 건너뜀(NFR-01)
@@ -181,6 +217,7 @@ class ListWalker:
                 log.warning("행 펼침 실패(재시도 포함) — 건너뜀: %s", sig[:12])
                 continue
             self._expand_attempts[sig] = attempts + 1
+            self._pending_expand = sig
             self.input.click(ui.ROW_CLICK_X, icon_y + ui.ROW_CLICK_DY)
             self.input.move(*ui.MOUSE_PARK)   # 호버 확대 렌더 방지(결함 E)
             self.input.pause()
@@ -203,10 +240,14 @@ class ListWalker:
         self._seen_panels.add(sig)
         rec = self.parser.parse(frame, anchor_y)
         if rec is None:
-            # 무효 렌더(확대 호버 등) — 저장하지 않는다. 같은 픽셀은 서명으로
+            # 무효 렌더(확대 등 일과성) — 저장하지 않는다. 같은 픽셀은 서명으로
             # 재파싱을 막고, 정상 재렌더는 새 서명이라 다음 패스에서 파싱된다.
             log.warning("무효 렌더 — 저장하지 않음 (anchor %d)", anchor_y)
             return
+        if self._pending_expand is not None:
+            # 직전 펼침 클릭이 새 패널로 소비됨 — 그 행의 재접힘 헤더는 완료 처리
+            self._done_rows.add(self._pending_expand)
+            self._pending_expand = None
         self.captures_dir.mkdir(parents=True, exist_ok=True)
         capture = self.captures_dir / f"{rec.battle_key}.png"
         Image.fromarray(np.ascontiguousarray(panel)).save(capture)

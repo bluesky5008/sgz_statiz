@@ -19,10 +19,14 @@ BATTLES_HEADER = ["battle_key", "battle_time", "result", "attacker", "defender",
                   "capture_path"]
 DECK_HEADER = ["battle_key", "battle_time", "result", "attacker", "defender",
                "side", "slot", "general", "level", "troops"]
+GENERALS_HEADER = ["general_id", "general", "level", "last_battle_time"]
 
 
 def export_csv(store: DataStore, out_dir: str | Path) -> list[Path]:
-    """전보·덱 CSV 2종을 생성하고 경로를 [battles, deck_long] 순서로 반환한다."""
+    """CSV 3종을 생성하고 [battles, deck_long, generals] 순서로 반환한다.
+
+    generals_<날짜>.csv는 장수별 최신 전투 기준 레벨이다(DCR-003).
+    """
     date = datetime.now().strftime("%Y%m%d")
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
@@ -41,4 +45,11 @@ def export_csv(store: DataStore, out_dir: str | Path) -> list[Path]:
         for r in store.deck_rows():
             w.writerow([r[c] for c in DECK_HEADER])
 
-    return [battles_path, deck_path]
+    generals_path = out / f"generals_{date}.csv"
+    with open(generals_path, "w", newline="", encoding="utf-8-sig") as fh:
+        w = csv.writer(fh)
+        w.writerow(GENERALS_HEADER)
+        for r in store.general_latest_levels():
+            w.writerow([r[c] for c in GENERALS_HEADER])
+
+    return [battles_path, deck_path, generals_path]

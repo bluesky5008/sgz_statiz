@@ -121,6 +121,114 @@ class FakeInput:
     def move(self, x, y):
         self.moves.append((x, y))
 
+    def pause(self):
+        pass
+
+
+class AccordionCapture:
+    """실기 캡처 3장으로 묶음 행 아코디언 재현 — 클릭마다 다음 프레임."""
+
+    def __init__(self, frames: list[np.ndarray]):
+        self.frames = frames
+        self.i = 0
+
+    def grab_fresh(self, timeout: float = 2.0) -> np.ndarray:
+        return self.frames[self.i]
+
+    def advance(self):
+        self.i = min(self.i + 1, len(self.frames) - 1)
+
+
+class AccordionInput(FakeInput):
+    def __init__(self, capture: AccordionCapture):
+        super().__init__()
+        self.capture = capture
+
+    def click(self, x, y):
+        super().click(x, y)
+        self.capture.advance()
+
+
+class AccordionWalkTest(unittest.TestCase):
+    """TASK-12 실기 발견(2026-08-09): 묶음 행 펼침은 아코디언 — 다른 묶음을
+    펼치면 이전 묶음이 재접힘된다. 이미 파싱한 묶음의 재접힘 헤더를 다시
+    클릭하면 토글 낭비와 skipped 오집계(FR-06 신뢰성 훼손)가 생긴다.
+
+    픽스처 img/accordion_s0~2.png = 실기 캡처(접힘 7개 → [7회] 펼침 →
+    [6회] 펼침·[7회] 재접힘). 재접힘 헤더가 픽셀 완전 동일함을 실측 확인
+    (채널차 0) — 서명 기반 완료 추적의 전제.
+    """
+
+    def test_bundle_clicked_once_and_both_parsed(self):
+        img = Path(__file__).resolve().parents[1] / "img"
+        frames = [np.asarray(Image.open(img / f"accordion_s{i}.png").convert("RGB"))
+                  for i in range(3)]
+        with tempfile.TemporaryDirectory() as tmp:
+            store = DataStore(":memory:")
+            parser = DeckParser(store, Path(tmp), evidence_dir=Path(tmp) / "ev")
+            capture = AccordionCapture(frames)
+            judge = ScreenJudge(capture, (2544, 657))
+            fi = AccordionInput(capture)
+            run = store.create_run()
+            walker = lw.ListWalker(judge, fi, parser, store, run,
+                                   captures_dir=Path(tmp) / "cap")
+            s = walker.walk()
+            self.assertEqual(store.battle_count(), 2)   # [7회]·[6회] 패널
+            b1 = [c for c in fi.clicks if abs(c[1] - (220 + ui.ROW_CLICK_DY)) <= 1]
+            self.assertEqual(len(b1), 1)                # 재접힘 [7회] 재클릭 금지
+            self.assertEqual(s.skipped, 3)              # 픽스처상 미펼침 3행만
+            store.close()
+
+
+class DetailCapture:
+    """열람 단건 행 재현(2026-08-09 실기): 행 클릭 → 전투 상세 화면, 귀환 → 목록."""
+
+    def __init__(self, list_frame: np.ndarray, detail_frame: np.ndarray):
+        self.frames = {"list": list_frame, "detail": detail_frame}
+        self.state = "list"
+
+    def grab_fresh(self, timeout: float = 2.0) -> np.ndarray:
+        return self.frames[self.state]
+
+
+class DetailInput(FakeInput):
+    def __init__(self, capture: DetailCapture):
+        super().__init__()
+        self.capture = capture
+
+    def click(self, x, y):
+        super().click(x, y)
+        self.capture.state = "list" if (x, y) == ui.CLICK_RETURN else "detail"
+
+
+class DetailRowRecoveryTest(unittest.TestCase):
+    """TASK-12 결함 F(2026-08-09 실기): 열람된 단건 행 클릭은 인라인 펼침이
+    아니라 전투 상세 화면으로 전환되고(img/detail.png), walker가 이탈을
+    감지하지 못하면 정지 화면을 종착으로 오인해 순회가 조기 종료된다.
+    목록 화면(동맹전보 제목 마커) 이탈을 감지해 귀환으로 복귀하고 원인 행을
+    상세형으로 건너뛴 뒤 순회를 계속해야 한다."""
+
+    def test_recovers_and_skips_detail_rows(self):
+        img = Path(__file__).resolve().parents[1] / "img"
+        list_frame = np.asarray(
+            Image.open(img / "accordion_s2.png").convert("RGB"))
+        detail = np.asarray(Image.open(img / "detail.png").convert("RGB"))
+        with tempfile.TemporaryDirectory() as tmp:
+            store = DataStore(":memory:")
+            parser = DeckParser(store, Path(tmp), evidence_dir=Path(tmp) / "ev")
+            capture = DetailCapture(list_frame, detail)
+            judge = ScreenJudge(capture, (2544, 657))
+            fi = DetailInput(capture)
+            run = store.create_run()
+            walker = lw.ListWalker(judge, fi, parser, store, run,
+                                   captures_dir=Path(tmp) / "cap")
+            s = walker.walk()
+            self.assertEqual(store.battle_count(), 1)   # 펼쳐진 행의 패널만
+            self.assertEqual(s.skipped, 4)              # 상세형 접힌 행 4개
+            returns = [c for c in fi.clicks if c == ui.CLICK_RETURN]
+            self.assertEqual(len(returns), 4)           # 행마다 귀환 복구 1회
+            store.close()
+
 
 class StalledCapture:
     """완전 정지 화면 재현 — grab_fresh는 CaptureStalled, grab은 마지막 프레임."""
@@ -194,6 +302,7 @@ class WalkTest(unittest.TestCase):
         window = np.asarray(Image.open(
             Path(__file__).resolve().parents[1] / "img" / "7.png").convert("RGB"))
         rolled = np.roll(window, -30, axis=0)   # 1행 아이콘 127→97 < 목록 top
+        rolled[:100, :200] = window[:100, :200]  # 화면 제목 마커 보존(이탈 가드 회피)
         with tempfile.TemporaryDirectory() as tmp:
             store = DataStore(":memory:")
             parser = DeckParser(store, Path(tmp), evidence_dir=Path(tmp) / "ev")

@@ -3,7 +3,7 @@
 > 문서 유형: `requirements`
 > 작업 ID: `20260808-telegram-deck-extract`
 > 상태: `approved`
-> 기준선: `v3` (승인일 2026-08-09 — [DCR-002](./changes/DCR-002-client-selection.md))
+> 기준선: `v4` (승인일 2026-08-09 — [DCR-003](./changes/DCR-003-battle-key.md), 요구사항 내용 불변·기준선 동기화)
 > 작성일: 2026-08-08
 > 최종 갱신: 2026-08-09
 > 관련 문서: [DESIGN-20260808-telegram-deck-extract: 설계](./design.md), [ADR-001: 저장 형식](./decisions/ADR-001-storage-format.md), [ADR-002: 인식 전략](./decisions/ADR-002-recognition-strategy.md)
@@ -125,3 +125,4 @@
 | 2026-08-08 | Q-01~Q-03 결정 전환, 기준선 v1 발행 | 사용자 승인 응답 | awaiting-approval → approved, v1 | 사용자 승인 / Claude 기록 |
 | 2026-08-09 | A-02 수정(단건 펼침·묶음 접힘·다중 펼침), 기준선 v2 | [DCR-001](./changes/DCR-001-list-traversal.md) 승인 | approved, v2 | 사용자 승인 / Claude 기록 |
 | 2026-08-09 | FR-08·AC-07 추가(구동 시 클라이언트 창 동적 탐지·선택), 범위 포함 갱신, 기준선 v3 | [DCR-002](./changes/DCR-002-client-selection.md) 승인 | approved, v3 | 사용자 승인 / Claude 기록 |
+| 2026-08-09 | 내용 불변 — 설계 기준선 동기화(v4, battle_key 재료 변경) | [DCR-003](./changes/DCR-003-battle-key.md) 승인 | approved, v4 | 사용자 승인 / Claude 기록 |
