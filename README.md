@@ -53,6 +53,8 @@ deckscan scan   [--hwnd N] [--max-items N] [--no-scroll] [--db PATH]
 deckscan probe  [--hwnd N] [--click X Y]   # 창 진단·스냅샷 (캘리브레이션용)
 deckscan export [--db PATH] [--out DIR]    # CSV 내보내기 3종
 deckscan label  [--db PATH]                # pending 식별자 라벨 확정(대화형)
+deckscan stats  [--db PATH] [--out DIR] [--alliance NAME]
+                # 교전 통계 — 단일 HTML 리포트 + 집계 CSV 4종 생성
 ```
 
 - **클라이언트 창 선택**: `scan`·`probe`는 구동 시 창을 자동 탐지합니다.
@@ -64,6 +66,11 @@ deckscan label  [--db PATH]                # pending 식별자 라벨 확정(대
 - `export`는 `output/export/`에 UTF-8(BOM) CSV 3종을 생성합니다:
   `battles_<날짜>.csv`(전보 1행), `deck_long_<날짜>.csv`(장수 1행 — 피벗
   집계용), `generals_<날짜>.csv`(장수별 최신 전투 기준 레벨).
+- `stats`는 `output/stats/`에 통계 리포트를 생성합니다 — 유저별 최신 덱·덱
+  변경 이력, 유저별 전적, 덱 조합별 승률, 장수 픽률(HTML 1장 + CSV 4종).
+  승/무/패는 아군 관점으로 정규화하며 아군 동맹은 최빈 동맹으로 자동
+  추정합니다(`--alliance`로 재정의). 라벨 미확정 식별자는 `#ID(제안)`으로
+  표기되므로 `label` 운영 후 재생성하면 이름이 반영됩니다.
 
 ## 알려진 한계
 

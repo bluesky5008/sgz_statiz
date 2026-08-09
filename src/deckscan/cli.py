@@ -131,6 +131,39 @@ def cmd_export(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_stats(args: argparse.Namespace) -> int:
+    import sqlite3
+
+    from .stats.aggregate import collect
+    from .stats.csv_out import export_stats_csv
+    from .stats.report import render_report
+
+    if not Path(args.db).is_file():
+        print(f"DB 없음: {args.db}")
+        return 1
+    conn = sqlite3.connect(f"file:{args.db}?mode=ro", uri=True)   # NFR-01 읽기 전용
+    try:
+        try:
+            stats = collect(conn, alliance=args.alliance)
+        except ValueError as e:
+            print(e)
+            return 1
+    finally:
+        conn.close()
+    if not stats["battle_count"]:
+        print("전보 데이터가 없습니다 — scan을 먼저 실행하세요")
+        return 1
+    out = Path(args.out)
+    out.mkdir(parents=True, exist_ok=True)
+    import datetime as dt
+    report = out / f"report_{dt.datetime.now():%Y%m%d}.html"
+    report.write_text(render_report(stats), encoding="utf-8")
+    print(f"report: {report}")
+    for p in export_stats_csv(stats, out):
+        print(f"csv: {p}")
+    return 0
+
+
 def cmd_label(args: argparse.Namespace) -> int:
     import os
 
@@ -174,6 +207,13 @@ def main(argv: list[str] | None = None) -> int:
     pl = sub.add_parser("label", help="pending 식별자 라벨 확정")
     pl.add_argument("--db", default=DEFAULT_DB)
     pl.set_defaults(func=cmd_label)
+
+    pt = sub.add_parser("stats", help="교전 통계 HTML 리포트·CSV 생성")
+    pt.add_argument("--db", default=DEFAULT_DB)
+    pt.add_argument("--out", default=str(Path("output") / "stats"))
+    pt.add_argument("--alliance", default=None,
+                    help="아군 동맹 라벨 또는 ID (기본: 최빈 동맹 자동 추정)")
+    pt.set_defaults(func=cmd_stats)
 
     args = p.parse_args(argv)
     return args.func(args)
